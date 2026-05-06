@@ -7,6 +7,7 @@ import type {
   ContentType,
   ContentVisibility,
   MiniUser,
+  ModuleEntryTabConfig,
   PageResult,
 } from '../types/api';
 
@@ -96,6 +97,18 @@ export async function batchUpdateContentState(
   data: { ids: string[]; visibility?: ContentVisibility; pinned?: boolean },
 ) {
   return unwrap(await http.patch(`/api/admin/contents/${type}/state/batch`, data));
+}
+
+export async function listModuleEntryTabsAdmin() {
+  return unwrap<{ tabs: ModuleEntryTabConfig[] }>(
+    await http.get('/api/admin/app-settings/module-entry-tabs'),
+  );
+}
+
+export async function setModuleEntryTabEnabled(key: string, enabled: boolean) {
+  return unwrap<{ tabs: ModuleEntryTabConfig[] }>(
+    await http.patch(`/api/admin/app-settings/module-entry-tabs/${encodeURIComponent(key)}`, { enabled }),
+  );
 }
 
 export function errorMessage(error: unknown) {

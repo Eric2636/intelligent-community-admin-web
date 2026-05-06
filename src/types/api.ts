@@ -1,3 +1,10 @@
+export type ModuleEntryTabConfig = {
+  key: string;
+  label: string;
+  enabled: boolean;
+  always: boolean;
+};
+
 export type AdminRole = 'ADMIN' | 'SUPERADMIN';
 export type AdminType = 'OFFICIAL' | 'THIRD_PARTY';
 export type ContentVisibility = 'ONLINE' | 'OFFLINE';

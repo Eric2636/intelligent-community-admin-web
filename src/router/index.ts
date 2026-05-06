@@ -3,6 +3,7 @@ import LoginView from '../views/LoginView.vue';
 import UsersView from '../views/UsersView.vue';
 import AdminsView from '../views/AdminsView.vue';
 import ContentView from '../views/ContentView.vue';
+import MiniModuleEntryView from '../views/MiniModuleEntryView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -11,6 +12,7 @@ export const router = createRouter({
     { path: '/', redirect: '/users' },
     { path: '/users', component: UsersView },
     { path: '/admins', component: AdminsView, meta: { superAdminOnly: true } },
+    { path: '/mini-modules', component: MiniModuleEntryView, meta: { superAdminOnly: true } },
     { path: '/contents/:type', component: ContentView },
   ],
 });

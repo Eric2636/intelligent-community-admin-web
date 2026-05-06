@@ -21,6 +21,10 @@
               <TeamOutlined />
               <span>管理员管理</span>
             </a-menu-item>
+            <a-menu-item v-if="isSuperAdmin" key="/mini-modules">
+              <MobileOutlined />
+              <span>小程序模块开关</span>
+            </a-menu-item>
         <a-sub-menu key="modules">
           <template #title>
             <AppstoreOutlined />
@@ -61,6 +65,7 @@ import {
   AppstoreOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MobileOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons-vue';
