@@ -7,6 +7,7 @@
         <a-select-option value="ONLINE">已上架</a-select-option>
         <a-select-option value="OFFLINE">未上架</a-select-option>
       </a-select>
+      <a-button v-if="canCreateContent" type="primary" @click="openCreate">新建</a-button>
       <a-button @click="load">刷新</a-button>
     </div>
     <a-table
@@ -17,7 +18,7 @@
       :columns="columns"
       :data-source="rows"
       :pagination="pagination"
-      :scroll="{ x: 988 }"
+      :scroll="{ x: 1120 }"
       @change="onTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -34,6 +35,7 @@
         <template v-if="column.key === 'visibility'">
           <a-switch
             size="small"
+            :disabled="!canModifyContent(record)"
             :checked="record.visibility === 'ONLINE'"
             @change="(checked: unknown) => toggleVisibility(record.id, Boolean(checked))"
           />
@@ -41,6 +43,7 @@
         <template v-if="column.key === 'pinned'">
           <a-switch
             size="small"
+            :disabled="!canModifyContent(record)"
             :checked="record.pinned"
             @change="(checked: unknown) => togglePinned(record.id, Boolean(checked))"
           />
@@ -54,6 +57,8 @@
         <template v-if="column.key === 'actions'">
           <a-space>
             <a-button size="small" @click="openDetail(record.id)">详情</a-button>
+            <a-button v-if="canModifyContent(record)" size="small" @click="openEdit(record)">编辑</a-button>
+            <a-button v-if="canModifyContent(record)" size="small" danger @click="confirmDelete(record)">删除</a-button>
           </a-space>
         </template>
       </template>
@@ -233,6 +238,129 @@
         <a-button @click="detailOpen = false">关闭</a-button>
       </div>
     </a-modal>
+
+    <a-modal
+      v-model:open="editOpen"
+      :title="editMode === 'create' ? `新建${title}` : `编辑${title}`"
+      width="640px"
+      :confirm-loading="editSaving"
+      destroy-on-close
+      @ok="submitEdit"
+    >
+      <a-spin :spinning="editDetailLoading">
+      <a-form layout="vertical" class="edit-form">
+        <a-form-item
+          label="发布者用户 ID（小程序 user id；超级管理员可指定，普通管理员固定为本人绑定用户）"
+        >
+          <a-input
+            v-model:value="editForm.actorUserId"
+            placeholder="选填"
+            allow-clear
+            :disabled="!isSuperAdmin"
+          />
+        </a-form-item>
+
+        <template v-if="type === 'errands'">
+          <a-form-item label="标题" required>
+            <a-input v-model:value="editForm.title" />
+          </a-form-item>
+          <a-form-item label="内容" required>
+            <a-textarea v-model:value="editForm.content" :rows="4" />
+          </a-form-item>
+          <a-form-item label="佣金（元）" :required="editMode === 'create'">
+            <a-input v-model:value="editForm.reward" placeholder="例如 10" />
+          </a-form-item>
+          <a-form-item v-if="editMode === 'edit'" label="状态">
+            <a-select v-model:value="editForm.errandStatus" allow-clear placeholder="不修改">
+              <a-select-option value="PENDING_TAKE">待领取</a-select-option>
+              <a-select-option value="IN_PROGRESS">进行中</a-select-option>
+              <a-select-option value="COMPLETED">已完成</a-select-option>
+            </a-select>
+          </a-form-item>
+        </template>
+
+        <template v-else-if="type === 'posts'">
+          <a-form-item label="标题" required>
+            <a-input v-model:value="editForm.title" />
+          </a-form-item>
+          <a-form-item label="正文">
+            <a-textarea v-model:value="editForm.content" :rows="4" />
+          </a-form-item>
+        </template>
+
+        <template v-else-if="type === 'items'">
+          <a-form-item label="分类" required>
+            <a-select v-model:value="editForm.categoryId">
+              <a-select-option v-for="c in mallCategories" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item label="标题" required>
+            <a-input v-model:value="editForm.title" />
+          </a-form-item>
+          <a-form-item label="描述" required>
+            <a-textarea v-model:value="editForm.desc" :rows="4" />
+          </a-form-item>
+          <a-form-item label="价格">
+            <a-input v-model:value="editForm.price" placeholder="选填" />
+          </a-form-item>
+          <a-form-item label="单位">
+            <a-input v-model:value="editForm.unit" placeholder="默认 元" />
+          </a-form-item>
+          <a-form-item label="联系方式">
+            <a-input v-model:value="editForm.contact" />
+          </a-form-item>
+        </template>
+
+        <template v-else-if="type === 'tasks'">
+          <a-form-item label="标题" required>
+            <a-input v-model:value="editForm.title" />
+          </a-form-item>
+          <a-form-item label="说明">
+            <a-textarea v-model:value="editForm.desc" :rows="4" />
+          </a-form-item>
+          <a-form-item label="佣金" :required="editMode === 'create'">
+            <a-input v-model:value="editForm.reward" />
+          </a-form-item>
+          <a-form-item label="地点">
+            <a-input v-model:value="editForm.location" />
+          </a-form-item>
+          <a-form-item v-if="editMode === 'edit'" label="状态">
+            <a-select v-model:value="editForm.taskStatus" allow-clear placeholder="不修改">
+              <a-select-option value="DRAFT">草稿</a-select-option>
+              <a-select-option value="PENDING_TAKE">待领取</a-select-option>
+              <a-select-option value="IN_PROGRESS">进行中</a-select-option>
+              <a-select-option value="PENDING_CONFIRM">待确认</a-select-option>
+              <a-select-option value="COMPLETED">已完成</a-select-option>
+              <a-select-option value="CANCELLED">已取消</a-select-option>
+            </a-select>
+          </a-form-item>
+        </template>
+
+        <a-form-item v-if="type !== 'items'" label="图片 URL（每行一条）">
+          <a-textarea v-model:value="editForm.imagesText" :rows="3" placeholder="https://..." />
+        </a-form-item>
+        <a-form-item v-if="type === 'items'" label="主图 URL（每行一条，新建时首行为主图）">
+          <a-textarea v-model:value="editForm.mainImagesText" :rows="2" />
+        </a-form-item>
+        <a-form-item v-if="type === 'items'" label="副图 URL（每行一条）">
+          <a-textarea v-model:value="editForm.subImagesText" :rows="2" />
+        </a-form-item>
+        <a-form-item label="视频 URL（每行一条）">
+          <a-textarea v-model:value="editForm.videosText" :rows="2" />
+        </a-form-item>
+
+        <a-form-item label="上架">
+          <a-select v-model:value="editForm.visibility">
+            <a-select-option value="ONLINE">已上架</a-select-option>
+            <a-select-option value="OFFLINE">未上架</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="置顶">
+          <a-switch v-model:checked="editForm.pinned" />
+        </a-form-item>
+      </a-form>
+      </a-spin>
+    </a-modal>
   </div>
 </template>
 
@@ -242,13 +370,17 @@ import { useRoute } from 'vue-router';
 import { Modal, message } from 'ant-design-vue';
 import type { TablePaginationConfig } from 'ant-design-vue';
 import {
+  createContent,
+  deleteContent,
   errorMessage,
   getContentDetail,
+  getCurrentAdmin,
   listContents,
+  updateContent,
   updateContentState,
 } from '../api/admin';
 import { formatDateTimeYmdHm } from '../utils/date';
-import type { ContentItem, ContentType, ContentVisibility } from '../types/api';
+import type { AdminUser, ContentItem, ContentType, ContentVisibility } from '../types/api';
 
 const route = useRoute();
 const loading = ref(false);
@@ -260,6 +392,81 @@ const pagination = reactive<TablePaginationConfig>({ current: 1, pageSize: 20, t
 const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detail = ref<any>(null);
+
+const mallCategories = [
+  { id: 'daily', name: '日用品' },
+  { id: 'second', name: '二手闲置' },
+  { id: 'wanted', name: '求购' },
+];
+
+const editOpen = ref(false);
+const editMode = ref<'create' | 'edit'>('create');
+const editSaving = ref(false);
+const editDetailLoading = ref(false);
+const editingId = ref<string | null>(null);
+const editForm = reactive({
+  actorUserId: '',
+  title: '',
+  content: '',
+  desc: '',
+  reward: '',
+  location: '',
+  categoryId: 'daily',
+  price: '',
+  unit: '元',
+  contact: '',
+  visibility: 'ONLINE' as ContentVisibility,
+  pinned: false,
+  errandStatus: undefined as string | undefined,
+  taskStatus: undefined as string | undefined,
+  imagesText: '',
+  videosText: '',
+  mainImagesText: '',
+  subImagesText: '',
+});
+
+/** 编辑态下用于判断媒体字段是否改动，避免误传空数组清空资源 */
+const editMediaSnapshot = reactive({
+  imagesText: '',
+  videosText: '',
+  mainImagesText: '',
+  subImagesText: '',
+});
+
+const adminRef = ref<AdminUser | null>(null);
+
+function syncAdminFromStorage() {
+  try {
+    const raw = localStorage.getItem('admin_user');
+    adminRef.value = raw ? (JSON.parse(raw) as AdminUser) : null;
+  } catch {
+    adminRef.value = null;
+  }
+}
+
+async function refreshAdmin() {
+  try {
+    const me = await getCurrentAdmin();
+    localStorage.setItem('admin_user', JSON.stringify(me));
+    adminRef.value = me;
+  } catch {
+    syncAdminFromStorage();
+  }
+}
+
+const isSuperAdmin = computed(() => adminRef.value?.role === 'SUPERADMIN');
+const boundUserId = computed(() => (adminRef.value?.boundUserId || '').trim());
+const canCreateContent = computed(() => isSuperAdmin.value || Boolean(boundUserId.value));
+
+function contentOwnerId(record: ContentItem): string {
+  return String(record.publisherId || record.authorId || '');
+}
+
+function canModifyContent(record: ContentItem): boolean {
+  if (isSuperAdmin.value) return true;
+  if (!boundUserId.value) return false;
+  return contentOwnerId(record) === boundUserId.value;
+}
 
 const type = computed(() => route.params.type as ContentType);
 const title = computed(() => {
@@ -279,7 +486,7 @@ const columns = [
   { title: '是否置顶', key: 'pinned', width: 108, align: 'center' as const },
   { title: '发布人', key: 'author', ellipsis: true, width: 112 },
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 156 },
-  { title: '操作', key: 'actions', width: 92, fixed: 'right' as const },
+  { title: '操作', key: 'actions', width: 200, fixed: 'right' as const },
 ];
 
 async function load() {
@@ -366,7 +573,249 @@ watch(type, () => {
   load();
 });
 
-onMounted(load);
+function linesToUrls(text: string): string[] {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function urlsToLines(arr: unknown): string {
+  if (!Array.isArray(arr)) return '';
+  return arr.map((u) => String(u).trim()).filter(Boolean).join('\n');
+}
+
+function resetEditForm() {
+  editForm.actorUserId = '';
+  editForm.title = '';
+  editForm.content = '';
+  editForm.desc = '';
+  editForm.reward = '';
+  editForm.location = '';
+  editForm.categoryId = 'daily';
+  editForm.price = '';
+  editForm.unit = '元';
+  editForm.contact = '';
+  editForm.visibility = 'ONLINE';
+  editForm.pinned = false;
+  editForm.errandStatus = undefined;
+  editForm.taskStatus = undefined;
+  editForm.imagesText = '';
+  editForm.videosText = '';
+  editForm.mainImagesText = '';
+  editForm.subImagesText = '';
+  editingId.value = null;
+  editMediaSnapshot.imagesText = '';
+  editMediaSnapshot.videosText = '';
+  editMediaSnapshot.mainImagesText = '';
+  editMediaSnapshot.subImagesText = '';
+}
+
+function openCreate() {
+  resetEditForm();
+  editMode.value = 'create';
+  if (!isSuperAdmin.value && boundUserId.value) {
+    editForm.actorUserId = boundUserId.value;
+  }
+  editOpen.value = true;
+}
+
+async function openEdit(record: ContentItem) {
+  resetEditForm();
+  editMode.value = 'edit';
+  editingId.value = record.id;
+  editOpen.value = true;
+  editDetailLoading.value = true;
+  try {
+    const d = await getContentDetail(type.value, record.id);
+    editForm.actorUserId = String(d.authorId || d.publisherId || '');
+    editForm.title = String(d.title || '');
+    editForm.content = String(d.content || '');
+    editForm.desc = String(d.desc || '');
+    editForm.reward = d.reward != null ? String(d.reward) : '';
+    editForm.location =
+      typeof d.location === 'string' ? d.location : d.location != null ? JSON.stringify(d.location) : '';
+    editForm.categoryId = String(d.categoryId || 'daily');
+    editForm.price = d.price != null ? String(d.price) : '';
+    editForm.unit = String(d.unit || '元');
+    editForm.contact = String(d.contact || '');
+    editForm.visibility = d.visibility === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
+    editForm.pinned = Boolean(d.pinned);
+    editForm.errandStatus = type.value === 'errands' ? String(d.status || '') : undefined;
+    editForm.taskStatus = type.value === 'tasks' ? String(d.status || '') : undefined;
+    if (type.value === 'items') {
+      const main = normArray(d.mainImages);
+      const sub = normArray(d.subImages);
+      const legacy = normArray(d.images);
+      editForm.mainImagesText = urlsToLines(main.length ? main : legacy.slice(0, 1));
+      editForm.subImagesText = urlsToLines(sub.length ? sub : legacy.slice(1));
+    } else {
+      editForm.imagesText = urlsToLines(normArray(d.images));
+    }
+    editForm.videosText = urlsToLines(normArray(d.videos));
+    editMediaSnapshot.imagesText = editForm.imagesText;
+    editMediaSnapshot.videosText = editForm.videosText;
+    editMediaSnapshot.mainImagesText = editForm.mainImagesText;
+    editMediaSnapshot.subImagesText = editForm.subImagesText;
+  } catch (error) {
+    message.error(errorMessage(error));
+    editOpen.value = false;
+  } finally {
+    editDetailLoading.value = false;
+  }
+}
+
+function buildPayload(): Record<string, unknown> {
+  const images = linesToUrls(editForm.imagesText);
+  const videos = linesToUrls(editForm.videosText);
+  const mainImages = linesToUrls(editForm.mainImagesText);
+  const subImages = linesToUrls(editForm.subImagesText);
+  const isEdit = editMode.value === 'edit';
+
+  const base: Record<string, unknown> = {
+    visibility: editForm.visibility,
+    pinned: editForm.pinned,
+  };
+  if (editForm.actorUserId.trim()) base.actorUserId = editForm.actorUserId.trim();
+
+  if (type.value === 'errands') {
+    Object.assign(base, {
+      title: editForm.title.trim(),
+      content: editForm.content.trim(),
+      reward: editForm.reward.trim(),
+    });
+    if (!isEdit || editForm.imagesText !== editMediaSnapshot.imagesText) base.images = images;
+    if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
+    if (isEdit && editForm.errandStatus) base.status = editForm.errandStatus;
+    return base;
+  }
+  if (type.value === 'posts') {
+    Object.assign(base, {
+      title: editForm.title.trim(),
+      content: editForm.content.trim(),
+    });
+    if (!isEdit || editForm.imagesText !== editMediaSnapshot.imagesText) base.images = images;
+    if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
+    return base;
+  }
+  if (type.value === 'items') {
+    const legacy = [...mainImages, ...subImages];
+    Object.assign(base, {
+      categoryId: editForm.categoryId,
+      title: editForm.title.trim(),
+      desc: editForm.desc.trim(),
+      price: editForm.price.trim() || undefined,
+      unit: editForm.unit.trim() || '元',
+      contact: editForm.contact.trim() || undefined,
+    });
+    const mediaTouched =
+      !isEdit ||
+      editForm.mainImagesText !== editMediaSnapshot.mainImagesText ||
+      editForm.subImagesText !== editMediaSnapshot.subImagesText;
+    if (mediaTouched) {
+      base.mainImages = mainImages;
+      base.subImages = subImages;
+      if (legacy.length) base.images = legacy;
+    }
+    if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
+    return base;
+  }
+  Object.assign(base, {
+    title: editForm.title.trim(),
+    desc: editForm.desc.trim(),
+    reward: editForm.reward.trim(),
+    location: editForm.location.trim(),
+  });
+  if (!isEdit || editForm.imagesText !== editMediaSnapshot.imagesText) base.images = images;
+  if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
+  if (isEdit && editForm.taskStatus) base.status = editForm.taskStatus;
+  return base;
+}
+
+async function submitEdit() {
+  const payload = buildPayload();
+  if (type.value === 'errands') {
+    if (!editForm.title.trim() || !editForm.content.trim()) {
+      message.warning('请填写标题和内容');
+      return Promise.reject();
+    }
+    if (editMode.value === 'create' && !editForm.reward.trim()) {
+      message.warning('请填写佣金');
+      return Promise.reject();
+    }
+  }
+  if (type.value === 'posts') {
+    if (!editForm.title.trim()) {
+      message.warning('请填写标题');
+      return Promise.reject();
+    }
+    const imgs = linesToUrls(editForm.imagesText);
+    if (!editForm.content.trim() && imgs.length === 0 && linesToUrls(editForm.videosText).length === 0) {
+      message.warning('正文与图片/视频至少填一项');
+      return Promise.reject();
+    }
+  }
+  if (type.value === 'items') {
+    if (!editForm.title.trim() || !editForm.desc.trim()) {
+      message.warning('请填写标题和描述');
+      return Promise.reject();
+    }
+  }
+  if (type.value === 'tasks') {
+    if (!editForm.title.trim()) {
+      message.warning('请填写标题');
+      return Promise.reject();
+    }
+    if (editMode.value === 'create') {
+      if (!editForm.reward.trim()) {
+        message.warning('请填写佣金');
+        return Promise.reject();
+      }
+      const imgs = linesToUrls(editForm.imagesText);
+      if (!editForm.desc.trim() && imgs.length === 0 && linesToUrls(editForm.videosText).length === 0) {
+        message.warning('说明与图片/视频至少填一项');
+        return Promise.reject();
+      }
+    }
+  }
+
+  editSaving.value = true;
+  try {
+    if (editMode.value === 'create') {
+      await createContent(type.value, payload);
+      message.success('创建成功');
+    } else if (editingId.value) {
+      await updateContent(type.value, editingId.value, payload);
+      message.success('已保存');
+    }
+    editOpen.value = false;
+    load();
+  } catch (error) {
+    message.error(errorMessage(error));
+    return Promise.reject(error);
+  } finally {
+    editSaving.value = false;
+  }
+}
+
+function confirmDelete(record: ContentItem) {
+  Modal.confirm({
+    title: '确认删除该条内容？',
+    content: '删除后不可恢复；若商品存在订单将无法删除。',
+    okText: '删除',
+    okType: 'danger',
+    async onOk() {
+      await deleteContent(type.value, record.id);
+      message.success('已删除');
+      load();
+    },
+  });
+}
+
+onMounted(async () => {
+  await refreshAdmin();
+  load();
+});
 
 function titleTooltip(record: ContentItem) {
   const t = record.title?.trim();

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type {
   AdminType,
+  AdminSystemLog,
   AdminUser,
   AdminUserDetail,
   ContentItem,
@@ -42,8 +43,16 @@ export async function login(data: { username: string; password: string }) {
   return unwrap<{ token: string; admin: AdminUser }>(await http.post('/api/admin/auth/login', data));
 }
 
+export async function getLoginCaptcha() {
+  return unwrap<{ captchaId: string; svg: string }>(await http.get('/api/admin/auth/captcha'));
+}
+
 export async function getCurrentAdmin() {
   return unwrap<AdminUser>(await http.get('/api/admin/auth/me'));
+}
+
+export async function changeMyPassword(password: string) {
+  return unwrap<{ ok: boolean }>(await http.post('/api/admin/auth/change-password', { password }));
 }
 
 export async function listUsers(params: { page?: number; pageSize?: number; keyword?: string }) {
@@ -58,19 +67,49 @@ export async function getUserDetail(userId: string) {
   return unwrap<AdminUserDetail>(await http.get(`/api/admin/users/${userId}`));
 }
 
+export async function listUsersMiniByIds(ids: string[]) {
+  const raw = (ids || []).map((x) => String(x).trim()).filter(Boolean);
+  const qs = raw.join(',');
+  return unwrap<Array<{ id: string; name: string; openid: string }>>(
+    await http.get('/api/admin/users-mini', { params: { ids: qs } }),
+  );
+}
+
 export async function listAdmins(params: { page?: number; pageSize?: number; keyword?: string }) {
   return unwrap<PageResult<AdminUser>>(await http.get('/api/admin/admin-users', { params }));
 }
 
-export async function createAdmin(data: { username: string; password: string; type?: AdminType; orgName?: string }) {
+export async function createAdmin(data: {
+  username: string;
+  password: string;
+  type?: AdminType;
+  orgName?: string;
+}) {
   return unwrap<AdminUser>(await http.post('/api/admin/admin-users', data));
 }
 
 export async function updateAdmin(
   adminId: string,
-  data: { enabled?: boolean; password?: string; type?: AdminType; orgName?: string },
+  data: {
+    enabled?: boolean;
+    password?: string;
+    type?: AdminType;
+    orgName?: string;
+    boundUserId?: string;
+  },
 ) {
   return unwrap<AdminUser>(await http.patch(`/api/admin/admin-users/${adminId}`, data));
+}
+
+export async function deleteAdmin(adminId: string) {
+  return unwrap<{ id: string }>(await http.delete(`/api/admin/admin-users/${adminId}`));
+}
+
+/** 超级管理员：将其他普通管理员密码重置为随机字符串，响应中一次性返回明文密码 */
+export async function superAdminResetAdminPasswordRandom(adminId: string) {
+  return unwrap<{ password: string; username: string }>(
+    await http.post(`/api/admin/admin-users/${adminId}/reset-password`),
+  );
 }
 
 export async function listContents(
@@ -92,6 +131,18 @@ export async function getContentDetail(type: ContentType, id: string) {
   return unwrap<any>(await http.get(`/api/admin/contents/${type}/${id}`));
 }
 
+export async function createContent(type: ContentType, data: Record<string, unknown>) {
+  return unwrap<any>(await http.post(`/api/admin/contents/${type}`, data));
+}
+
+export async function updateContent(type: ContentType, id: string, data: Record<string, unknown>) {
+  return unwrap<any>(await http.patch(`/api/admin/contents/${type}/${id}`, data));
+}
+
+export async function deleteContent(type: ContentType, id: string) {
+  return unwrap<{ id: string }>(await http.delete(`/api/admin/contents/${type}/${id}`));
+}
+
 export async function batchUpdateContentState(
   type: ContentType,
   data: { ids: string[]; visibility?: ContentVisibility; pinned?: boolean },
@@ -109,6 +160,10 @@ export async function setModuleEntryTabEnabled(key: string, enabled: boolean) {
   return unwrap<{ tabs: ModuleEntryTabConfig[] }>(
     await http.patch(`/api/admin/app-settings/module-entry-tabs/${encodeURIComponent(key)}`, { enabled }),
   );
+}
+
+export async function listSystemLogs(params: { page?: number; pageSize?: number; keyword?: string; action?: string }) {
+  return unwrap<PageResult<AdminSystemLog>>(await http.get('/api/admin/system-logs', { params }));
 }
 
 export function errorMessage(error: unknown) {

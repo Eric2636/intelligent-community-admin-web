@@ -15,6 +15,8 @@ export type AdminUser = {
   role: AdminRole;
   type: AdminType;
   orgName?: string;
+  /** 绑定的小程序用户 id，普通管理员仅能操作该用户发布的内容 */
+  boundUserId?: string | null;
   enabled: boolean;
   lastLoginAt?: string;
   createdAt: string;
@@ -37,6 +39,16 @@ export type MiniUser = {
 export type PageResult<T> = {
   total: number;
   list: T[];
+};
+
+export type AdminSystemLog = {
+  id: string;
+  adminId: string;
+  adminUsername: string;
+  ip: string;
+  action: string;
+  detail?: any;
+  createdAt: string;
 };
 
 export type ContentType = 'errands' | 'posts' | 'items' | 'tasks';

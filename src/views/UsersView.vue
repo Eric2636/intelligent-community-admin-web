@@ -12,7 +12,7 @@
       :columns="columns"
       :data-source="rows"
       :pagination="pagination"
-      :scroll="{ x: 1060 }"
+      :scroll="{ x: 820 }"
       @change="onTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -33,6 +33,29 @@
         </template>
       </template>
     </a-table>
+
+    <a-modal
+      v-model:open="reasonOpen"
+      title="冻结用户"
+      :confirm-loading="reasonSaving"
+      @ok="submitFreeze"
+      destroy-on-close
+    >
+      <div style="margin-bottom: 8px; color: rgba(0, 0, 0, 0.65); font-size: 13px">
+        <span>将冻结该用户的写操作（发布/评论/点赞/收藏等）。</span>
+      </div>
+      <a-form layout="vertical">
+        <a-form-item label="冻结原因" required>
+          <a-textarea
+            v-model:value="reasonForm.reason"
+            placeholder="例如：恶意刷屏 / 违规内容 / 投诉核实中"
+            :auto-size="{ minRows: 3, maxRows: 6 }"
+            show-count
+            :maxlength="200"
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
@@ -41,6 +64,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { Modal, message } from 'ant-design-vue';
 import type { TablePaginationConfig } from 'ant-design-vue';
 import { errorMessage, listUsers, updateUserEnabled } from '../api/admin';
+import { useAdminFromStorage } from '../composables/use-admin-from-storage';
 import { formatDateTimeYmdHm } from '../utils/date';
 import type { MiniUser } from '../types/api';
 
@@ -48,14 +72,18 @@ const loading = ref(false);
 const keyword = ref('');
 const rows = ref<MiniUser[]>([]);
 const pagination = reactive<TablePaginationConfig>({ current: 1, pageSize: 20, total: 0 });
-const currentAdmin = computed(() => JSON.parse(localStorage.getItem('admin_user') || '{}'));
-const canManageUsers = computed(() => currentAdmin.value.role === 'SUPERADMIN');
+const currentAdmin = useAdminFromStorage();
+const canManageUsers = computed(() => currentAdmin.value?.role === 'SUPERADMIN');
+
+const reasonOpen = ref(false);
+const reasonSaving = ref(false);
+const reasonTarget = ref<{ userId: string; enabled: boolean; name?: string; openid?: string } | null>(null);
+const reasonForm = reactive<{ reason: string }>({ reason: '' });
 
 const columns = [
   { title: '昵称', dataIndex: 'name', key: 'name', ellipsis: true, width: 120 },
-  { title: 'OpenID', dataIndex: 'openid', key: 'openid', ellipsis: true, width: 240 },
   { title: '状态', key: 'enabled', width: 88, align: 'center' as const },
-  { title: '冻结原因', dataIndex: 'disabledReason', key: 'disabledReason', ellipsis: true, width: 200 },
+  { title: '冻结原因', dataIndex: 'disabledReason', key: 'disabledReason', ellipsis: true, width: 260 },
   { title: '注册时间', dataIndex: 'createdAt', key: 'createdAt', width: 156 },
   { title: '操作', key: 'action', width: 100, align: 'center' as const },
 ];
@@ -84,15 +112,45 @@ function onTableChange(page: TablePaginationConfig) {
 }
 
 function toggleUser(id: string, enabled: boolean) {
-  Modal.confirm({
-    title: enabled ? '确认启用用户？' : '确认冻结用户？',
-    content: enabled ? '启用后用户可以恢复写操作。' : '冻结后用户不能发布、评论、点赞、收藏等写操作。',
-    async onOk() {
-      await updateUserEnabled(id, { enabled, reason: enabled ? undefined : '后台冻结' });
-      message.success('操作成功');
-      load();
-    },
-  });
+  if (enabled) {
+    Modal.confirm({
+      title: '确认启用用户？',
+      content: '启用后用户可以恢复写操作。',
+      async onOk() {
+        await updateUserEnabled(id, { enabled: true });
+        message.success('操作成功');
+        load();
+      },
+    });
+    return;
+  }
+
+  const row = rows.value.find((x) => x.id === id);
+  reasonTarget.value = { userId: id, enabled: false, name: row?.name, openid: row?.openid };
+  reasonForm.reason = (row?.disabledReason || '').trim();
+  reasonOpen.value = true;
+}
+
+async function submitFreeze() {
+  if (!reasonTarget.value) return;
+  const id = reasonTarget.value.userId;
+  const reason = reasonForm.reason.trim();
+  if (!reason) {
+    message.warning('请填写冻结原因');
+    return Promise.reject();
+  }
+  reasonSaving.value = true;
+  try {
+    await updateUserEnabled(id, { enabled: false, reason });
+    message.success('已冻结');
+    reasonOpen.value = false;
+    await load();
+  } catch (e) {
+    message.error(errorMessage(e));
+    return Promise.reject(e);
+  } finally {
+    reasonSaving.value = false;
+  }
 }
 
 onMounted(load);
