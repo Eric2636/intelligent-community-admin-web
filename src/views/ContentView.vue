@@ -13,7 +13,7 @@
     <a-table
       class="data-table"
       size="middle"
-      row-key="id"
+      row-key="__rowKey"
       :loading="loading"
       :columns="columns"
       :data-source="rows"
@@ -34,6 +34,7 @@
         </template>
         <template v-if="column.key === 'visibility'">
           <a-switch
+            :key="`visibility-${record.__rowKey}`"
             size="small"
             :disabled="!canModifyContent(record)"
             :checked="record.visibility === 'ONLINE'"
@@ -41,12 +42,18 @@
           />
         </template>
         <template v-if="column.key === 'pinned'">
-          <a-switch
-            size="small"
-            :disabled="!canModifyContent(record)"
-            :checked="record.pinned"
-            @change="(checked: unknown) => togglePinned(record.id, Boolean(checked))"
-          />
+          <span
+            class="switch-click-area"
+            :class="{ disabled: !canModifyContent(record) }"
+            @click.stop="canModifyContent(record) && togglePinnedById(record.id)"
+          >
+            <a-switch
+              :key="`pinned-${record.__rowKey}`"
+              size="small"
+              :disabled="!canModifyContent(record)"
+              :checked="Boolean(record.pinned)"
+            />
+          </span>
         </template>
         <template v-if="column.key === 'author'">
           {{ recordAuthorName(record) || '-' }}
@@ -160,7 +167,7 @@
                 <a-image v-for="(u, idx) in itemPreviewImages(detail)" :key="`img-${idx}`" :src="String(u)" />
                 <video v-for="(u, idx) in normArray(detail?.videos)" :key="`vid-${idx}`" :src="String(u)" controls />
               </div>
-              <div v-else class="mp-media-empty">暂无媒体</div>
+              <div v-else class="mp-media-empty"><FileImageOutlined /></div>
             </div>
             <div class="mp-price" v-if="detail?.price">{{ detail.price }}{{ detail?.unit || '元' }}</div>
             <div class="mp-subtime">{{ detail?.createdAt ? formatDateTimeYmdHm(detail.createdAt) : '' }}</div>
@@ -250,6 +257,7 @@
       <a-spin :spinning="editDetailLoading">
       <a-form layout="vertical" class="edit-form">
         <a-form-item
+          v-if="editMode === 'edit'"
           label="发布者用户 ID（小程序 user id；超级管理员可指定，普通管理员固定为本人绑定用户）"
         >
           <a-input
@@ -336,17 +344,81 @@
           </a-form-item>
         </template>
 
-        <a-form-item v-if="type !== 'items'" label="图片 URL（每行一条）">
-          <a-textarea v-model:value="editForm.imagesText" :rows="3" placeholder="https://..." />
+        <a-form-item v-if="type !== 'items'" label="图片">
+          <div v-if="linesToUrls(editForm.imagesText).length" class="edit-media-list">
+            <div v-for="(url, idx) in linesToUrls(editForm.imagesText)" :key="`${url}-${idx}`" class="edit-media-item">
+              <a-image :src="url" />
+              <a-button size="small" danger shape="circle" title="删除" @click="removeMediaUrl('imagesText', idx)">
+                <template #icon><DeleteOutlined /></template>
+              </a-button>
+            </div>
+          </div>
+          <a-upload
+            accept="image/*"
+            :show-upload-list="false"
+            :custom-request="(options: any) => uploadToMediaField(options, 'imagesText', 'img')"
+          >
+            <a-button :loading="mediaUploading.imagesText" title="上传图片" aria-label="上传图片">
+              <template #icon><PlusOutlined /></template>
+            </a-button>
+          </a-upload>
         </a-form-item>
-        <a-form-item v-if="type === 'items'" label="主图 URL（每行一条，新建时首行为主图）">
-          <a-textarea v-model:value="editForm.mainImagesText" :rows="2" />
+        <a-form-item v-if="type === 'items'" label="主图">
+          <div v-if="linesToUrls(editForm.mainImagesText).length" class="edit-media-list">
+            <div v-for="(url, idx) in linesToUrls(editForm.mainImagesText)" :key="`${url}-${idx}`" class="edit-media-item">
+              <a-image :src="url" />
+              <a-button size="small" danger shape="circle" title="删除" @click="removeMediaUrl('mainImagesText', idx)">
+                <template #icon><DeleteOutlined /></template>
+              </a-button>
+            </div>
+          </div>
+          <a-upload
+            accept="image/*"
+            :show-upload-list="false"
+            :custom-request="(options: any) => uploadToMediaField(options, 'mainImagesText', 'img')"
+          >
+            <a-button :loading="mediaUploading.mainImagesText" title="上传主图" aria-label="上传主图">
+              <template #icon><PlusOutlined /></template>
+            </a-button>
+          </a-upload>
         </a-form-item>
-        <a-form-item v-if="type === 'items'" label="副图 URL（每行一条）">
-          <a-textarea v-model:value="editForm.subImagesText" :rows="2" />
+        <a-form-item v-if="type === 'items'" label="副图">
+          <div v-if="linesToUrls(editForm.subImagesText).length" class="edit-media-list">
+            <div v-for="(url, idx) in linesToUrls(editForm.subImagesText)" :key="`${url}-${idx}`" class="edit-media-item">
+              <a-image :src="url" />
+              <a-button size="small" danger shape="circle" title="删除" @click="removeMediaUrl('subImagesText', idx)">
+                <template #icon><DeleteOutlined /></template>
+              </a-button>
+            </div>
+          </div>
+          <a-upload
+            accept="image/*"
+            :show-upload-list="false"
+            :custom-request="(options: any) => uploadToMediaField(options, 'subImagesText', 'img')"
+          >
+            <a-button :loading="mediaUploading.subImagesText" title="上传副图" aria-label="上传副图">
+              <template #icon><PlusOutlined /></template>
+            </a-button>
+          </a-upload>
         </a-form-item>
-        <a-form-item label="视频 URL（每行一条）">
-          <a-textarea v-model:value="editForm.videosText" :rows="2" />
+        <a-form-item label="视频">
+          <div v-if="linesToUrls(editForm.videosText).length" class="edit-media-list">
+            <div v-for="(url, idx) in linesToUrls(editForm.videosText)" :key="`${url}-${idx}`" class="edit-media-item edit-media-item--video">
+              <video :src="url" controls />
+              <a-button size="small" danger shape="circle" title="删除" @click="removeMediaUrl('videosText', idx)">
+                <template #icon><DeleteOutlined /></template>
+              </a-button>
+            </div>
+          </div>
+          <a-upload
+            accept="video/*"
+            :show-upload-list="false"
+            :custom-request="(options: any) => uploadToMediaField(options, 'videosText', 'vid')"
+          >
+            <a-button :loading="mediaUploading.videosText" title="上传视频" aria-label="上传视频">
+              <template #icon><VideoCameraOutlined /></template>
+            </a-button>
+          </a-upload>
         </a-form-item>
 
         <a-form-item label="上架">
@@ -367,9 +439,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { DeleteOutlined, FileImageOutlined, PlusOutlined, VideoCameraOutlined } from '@ant-design/icons-vue';
 import { Modal, message } from 'ant-design-vue';
 import type { TablePaginationConfig } from 'ant-design-vue';
 import {
+  type AdminUploadMediaType,
+  type AdminUploadModule,
   createContent,
   deleteContent,
   errorMessage,
@@ -380,6 +455,7 @@ import {
   updateContentState,
 } from '../api/admin';
 import { formatDateTimeYmdHm } from '../utils/date';
+import { uploadAdminMedia } from '../utils/cosUpload';
 import type { AdminUser, ContentItem, ContentType, ContentVisibility } from '../types/api';
 
 const route = useRoute();
@@ -432,6 +508,13 @@ const editMediaSnapshot = reactive({
   mainImagesText: '',
   subImagesText: '',
 });
+type MediaTextField = keyof typeof editMediaSnapshot;
+const mediaUploading = reactive<Record<MediaTextField, boolean>>({
+  imagesText: false,
+  videosText: false,
+  mainImagesText: false,
+  subImagesText: false,
+});
 
 const adminRef = ref<AdminUser | null>(null);
 
@@ -471,10 +554,10 @@ function canModifyContent(record: ContentItem): boolean {
 const type = computed(() => route.params.type as ContentType);
 const title = computed(() => {
   const map: Record<ContentType, string> = {
-    errands: '业主互助',
+    errands: '跑腿',
     posts: '小区留言',
     items: '小区市场',
-    tasks: '任务管理',
+    tasks: '业主互助',
   };
   return map[type.value] || '模块管理';
 });
@@ -498,7 +581,18 @@ async function load() {
       keyword: keyword.value || undefined,
       visibility: visibility.value || undefined,
     });
-    rows.value = data.list;
+    // 行 key 必须稳定且唯一，否则 a-table 会复用错行 DOM，出现“点第 N 个开关却影响第 1 个”的错位
+    rows.value = (data.list || []).map((r: any, idx: number) => {
+      const id = String(r?.id || r?._id || '').trim();
+      const fallback = `${type.value}:${pagination.current}:${idx}`;
+      const rowKey = id || fallback;
+      return {
+        ...r,
+        id,
+        __rowKey: rowKey,
+        pinned: Boolean(r?.pinned),
+      };
+    });
     pagination.total = data.total;
   } catch (error) {
     message.error(errorMessage(error));
@@ -527,6 +621,8 @@ function toggleVisibility(id: string, online: boolean) {
     async onOk() {
       await updateContentState(type.value, id, { visibility: online ? 'ONLINE' : 'OFFLINE' });
       message.success('操作成功');
+      // 上下架会影响列表可见性与排序；回到第一页避免“操作后当前页看不到”造成误判
+      pagination.current = 1;
       load();
     },
   });
@@ -537,17 +633,27 @@ const pinHelpOn =
 const pinHelpOff =
   '取消置顶后：该条按发布时间等默认规则参与排序，不再固定靠前。';
 
-function togglePinned(id: string, pinned: boolean) {
+function togglePinnedById(rawId: string) {
+  const id = String(rawId || '').trim();
+  const row = rows.value.find((item) => String(item.id || '').trim() === id);
+  if (!id || !row) {
+    message.error('未找到当前行数据，请刷新后重试');
+    return;
+  }
+  const nextPinned = !Boolean(row.pinned);
   Modal.confirm({
-    title: pinned ? '确认置顶？' : '确认取消置顶？',
-    content: pinned ? pinHelpOn : pinHelpOff,
+    title: nextPinned ? '确认置顶？' : '确认取消置顶？',
+    content: nextPinned ? pinHelpOn : pinHelpOff,
     okText: '确定',
     cancelText: '取消',
     async onOk() {
       try {
-        await updateContentState(type.value, id, { pinned });
+        await updateContentState(type.value, id, { pinned: nextPinned });
+        row.pinned = nextPinned;
+        rows.value = rows.value.map((item) =>
+          String(item.id || '').trim() === id ? { ...item, pinned: nextPinned } : item,
+        );
         message.success('操作成功');
-        load();
       } catch (error) {
         message.error(errorMessage(error));
       }
@@ -583,6 +689,62 @@ function linesToUrls(text: string): string[] {
 function urlsToLines(arr: unknown): string {
   if (!Array.isArray(arr)) return '';
   return arr.map((u) => String(u).trim()).filter(Boolean).join('\n');
+}
+
+function contentUploadModule(): AdminUploadModule {
+  const map: Record<ContentType, AdminUploadModule> = {
+    errands: 'errand',
+    posts: 'forum',
+    items: 'mall',
+    tasks: 'task',
+  };
+  return map[type.value] || 'forum';
+}
+
+function setMediaUrls(field: MediaTextField, urls: string[]) {
+  editForm[field] = urls.map((u) => String(u).trim()).filter(Boolean).join('\n');
+}
+
+function appendMediaUrl(field: MediaTextField, url: string) {
+  setMediaUrls(field, [...linesToUrls(editForm[field]), url]);
+}
+
+function removeMediaUrl(field: MediaTextField, index: number) {
+  const urls = linesToUrls(editForm[field]);
+  urls.splice(index, 1);
+  setMediaUrls(field, urls);
+}
+
+function uploadErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const e = error as Record<string, unknown>;
+    return String(e.message || e.error || e.errMsg || e.Code || e.code || '上传失败');
+  }
+  return errorMessage(error);
+}
+
+async function uploadToMediaField(options: any, field: MediaTextField, mediaType: AdminUploadMediaType) {
+  const file = options.file instanceof File ? options.file : options.file?.originFileObj;
+  if (!file) {
+    const error = new Error('请选择要上传的文件');
+    options.onError?.(error);
+    message.error(error.message);
+    return;
+  }
+
+  mediaUploading[field] = true;
+  try {
+    const url = await uploadAdminMedia(file, { module: contentUploadModule(), type: mediaType });
+    appendMediaUrl(field, url);
+    options.onSuccess?.({ url }, file);
+    message.success('上传成功');
+  } catch (error) {
+    options.onError?.(error);
+    message.error(uploadErrorMessage(error));
+  } finally {
+    mediaUploading[field] = false;
+  }
 }
 
 function resetEditForm() {
@@ -880,6 +1042,19 @@ function formatLocation(v: unknown) {
   color: rgba(0, 0, 0, 0.65);
 }
 
+.switch-click-area {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.switch-click-area.disabled {
+  cursor: not-allowed;
+}
+
+.switch-click-area :deep(.ant-switch) {
+  pointer-events: none;
+}
+
 .detail-json {
   margin: 0;
   max-height: 320px;
@@ -908,6 +1083,43 @@ function formatLocation(v: unknown) {
   width: 100%;
   max-height: 220px;
   border-radius: 8px;
+  background: #000;
+}
+
+.edit-media-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.edit-media-item {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.edit-media-item :deep(.ant-image),
+.edit-media-item video {
+  display: block;
+  width: 100%;
+  height: 96px;
+}
+
+.edit-media-item :deep(.ant-image-img),
+.edit-media-item video {
+  object-fit: cover;
+}
+
+.edit-media-item :deep(.ant-btn) {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+}
+
+.edit-media-item--video video {
   background: #000;
 }
 
@@ -1097,11 +1309,12 @@ function formatLocation(v: unknown) {
 }
 
 .mp-media-empty {
-  padding: 18px;
+  padding: 24px;
   text-align: center;
   color: rgba(0, 0, 0, 0.45);
   background: rgba(0, 0, 0, 0.02);
   border-radius: 10px;
+  font-size: 24px;
 }
 
 .mp-price {

@@ -34,10 +34,9 @@
                 <AppstoreOutlined />
                 <span>模块管理</span>
               </template>
-              <a-menu-item key="/contents/errands">业主互助</a-menu-item>
               <a-menu-item key="/contents/posts">小区留言</a-menu-item>
               <a-menu-item key="/contents/items">小区市场</a-menu-item>
-              <a-menu-item key="/contents/tasks">任务管理</a-menu-item>
+              <a-menu-item key="/contents/tasks">业主互助</a-menu-item>
             </a-sub-menu>
           </a-menu>
         </div>

@@ -143,6 +143,28 @@ export async function deleteContent(type: ContentType, id: string) {
   return unwrap<{ id: string }>(await http.delete(`/api/admin/contents/${type}/${id}`));
 }
 
+export type AdminUploadModule = 'forum' | 'task' | 'errand' | 'mall' | 'avatar';
+export type AdminUploadMediaType = 'img' | 'vid';
+
+export async function getAdminCosCredentials(data: {
+  module: AdminUploadModule;
+  type: AdminUploadMediaType;
+}) {
+  return unwrap<{
+    bucket: string;
+    region: string;
+    envPrefix: string;
+    allowPrefix: string;
+    credentials: {
+      tmpSecretId: string;
+      tmpSecretKey: string;
+      sessionToken: string;
+    };
+    startTime: number;
+    expiredTime: number;
+  }>(await http.post('/api/admin/upload/cos/credentials', data));
+}
+
 export async function batchUpdateContentState(
   type: ContentType,
   data: { ids: string[]; visibility?: ContentVisibility; pinned?: boolean },
