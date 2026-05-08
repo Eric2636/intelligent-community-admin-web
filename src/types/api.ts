@@ -51,6 +51,27 @@ export type AdminSystemLog = {
   createdAt: string;
 };
 
+export type MiniApiErrorLog = {
+  id: string;
+  userId?: string | null;
+  openid?: string | null;
+  ip?: string | null;
+  method: string;
+  path: string;
+  url?: string | null;
+  statusCode?: number | null;
+  errorMessage: string;
+  requestData?: any;
+  responseData?: any;
+  stack?: string | null;
+  platform?: string | null;
+  appVersion?: string | null;
+  sdkVersion?: string | null;
+  system?: string | null;
+  networkType?: string | null;
+  createdAt: string;
+};
+
 export type ContentType = 'errands' | 'posts' | 'items' | 'tasks';
 
 export type ContentItem = {

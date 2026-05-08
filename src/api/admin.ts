@@ -7,6 +7,7 @@ import type {
   ContentItem,
   ContentType,
   ContentVisibility,
+  MiniApiErrorLog,
   MiniUser,
   ModuleEntryTabConfig,
   PageResult,
@@ -186,6 +187,18 @@ export async function setModuleEntryTabEnabled(key: string, enabled: boolean) {
 
 export async function listSystemLogs(params: { page?: number; pageSize?: number; keyword?: string; action?: string }) {
   return unwrap<PageResult<AdminSystemLog>>(await http.get('/api/admin/system-logs', { params }));
+}
+
+export async function listMiniApiErrorLogs(params: {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+  method?: string;
+  statusCode?: number;
+}) {
+  return unwrap<PageResult<MiniApiErrorLog>>(
+    await http.get('/api/admin/mini-api-error-logs', { params }),
+  );
 }
 
 export function errorMessage(error: unknown) {

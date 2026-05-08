@@ -25,6 +25,10 @@
               <MobileOutlined />
               <span>小程序模块开关</span>
             </a-menu-item>
+            <a-menu-item v-if="isSuperAdmin" key="/mini-api-error-logs">
+              <BugOutlined />
+              <span>小程序接口日志</span>
+            </a-menu-item>
             <a-menu-item v-if="isSuperAdmin" key="/system-logs">
               <FileSearchOutlined />
               <span>系统日志</span>
@@ -106,6 +110,7 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   AppstoreOutlined,
+  BugOutlined,
   DownOutlined,
   FileSearchOutlined,
   LockOutlined,
