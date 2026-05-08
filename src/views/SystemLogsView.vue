@@ -42,7 +42,9 @@
 
     <a-modal v-model:open="detailOpen" title="日志详情" :footer="null" width="720px" destroy-on-close>
       <div class="detail-head">
-        <div><span class="label">时间</span>{{ detailRow?.createdAt || '-' }}</div>
+        <div>
+          <span class="label">时间</span>{{ detailRow?.createdAt ? formatDateTimeYmdHm(detailRow.createdAt) : '-' }}
+        </div>
         <div><span class="label">管理员</span>{{ detailRow?.adminUsername || '-' }}</div>
         <div><span class="label">IP</span>{{ detailRow?.ip || '-' }}</div>
         <div><span class="label">动作</span>{{ detailRow?.action || '-' }}</div>
@@ -163,4 +165,3 @@ onMounted(load);
   overflow: auto;
 }
 </style>
-
