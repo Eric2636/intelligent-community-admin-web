@@ -52,7 +52,8 @@ async function submit() {
       payload.captchaCode = form.captchaCode;
     }
     const data = await login(payload);
-    localStorage.setItem('admin_token', data.token);
+    localStorage.setItem('admin_token', data.accessToken || data.token);
+    localStorage.setItem('admin_refresh_token', data.refreshToken);
     localStorage.setItem('admin_user', JSON.stringify(data.admin));
     message.success('登录成功');
     router.push('/');

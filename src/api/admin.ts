@@ -14,6 +14,15 @@ import type {
 } from '../types/api';
 
 const http = axios.create({ baseURL: '' });
+const rawHttp = axios.create({ baseURL: '' });
+
+let refreshPromise: Promise<string> | null = null;
+
+function clearAdminSession() {
+  localStorage.removeItem('admin_token');
+  localStorage.removeItem('admin_refresh_token');
+  localStorage.removeItem('admin_user');
+}
 
 http.interceptors.request.use((config) => {
   const token = localStorage.getItem('admin_token');
@@ -23,9 +32,35 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error?.response?.status === 401) {
-      localStorage.removeItem('admin_token');
+      const originalRequest = error.config;
+      const refreshToken = localStorage.getItem('admin_refresh_token');
+      if (refreshToken && !originalRequest?._retry && originalRequest?.url !== '/api/admin/auth/refresh') {
+        originalRequest._retry = true;
+        try {
+          refreshPromise ??= rawHttp
+            .post('/api/admin/auth/refresh', { refreshToken })
+            .then((res) => unwrap<{ token: string; accessToken?: string; admin?: AdminUser }>(res))
+            .then((data) => {
+              const nextToken = data.accessToken || data.token;
+              localStorage.setItem('admin_token', nextToken);
+              if (data.admin) localStorage.setItem('admin_user', JSON.stringify(data.admin));
+              return nextToken;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
+          const nextToken = await refreshPromise;
+          originalRequest.headers = originalRequest.headers || {};
+          originalRequest.headers.Authorization = `Bearer ${nextToken}`;
+          return http(originalRequest);
+        } catch {
+          clearAdminSession();
+        }
+      } else {
+        clearAdminSession();
+      }
       if (location.pathname !== '/login') location.href = '/login';
     }
     return Promise.reject(error);
@@ -41,7 +76,14 @@ function unwrap<T>(res: { data: { code?: number; data?: T } | T }): T {
 }
 
 export async function login(data: { username: string; password: string }) {
-  return unwrap<{ token: string; admin: AdminUser }>(await http.post('/api/admin/auth/login', data));
+  return unwrap<{
+    token: string;
+    accessToken?: string;
+    refreshToken: string;
+    expiresIn?: string;
+    refreshExpiresIn?: string;
+    admin: AdminUser;
+  }>(await http.post('/api/admin/auth/login', data));
 }
 
 export async function getLoginCaptcha() {
