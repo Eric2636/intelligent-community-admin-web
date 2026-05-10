@@ -8,6 +8,9 @@
         <a-select-option value="OFFLINE">未上架</a-select-option>
       </a-select>
       <a-button v-if="canCreateContent" type="primary" @click="openCreate">新建</a-button>
+      <a-button v-if="canCreateContent && type === 'posts'" type="primary" ghost @click="openCreateAnnouncement">
+        发布公告
+      </a-button>
       <a-button @click="load">刷新</a-button>
     </div>
     <a-table
@@ -24,7 +27,10 @@
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'title'">
           <a-tooltip :title="titleTooltip(record) || undefined" placement="topLeft">
-            <span class="content-title-cell">{{ record.title?.trim() || '-' }}</span>
+            <span class="content-title-cell">
+              <a-tag v-if="record.postType === 'ANNOUNCEMENT'" color="gold">公告</a-tag>
+              {{ record.title?.trim() || '-' }}
+            </span>
           </a-tooltip>
         </template>
         <template v-if="column.key === 'text'">
@@ -60,6 +66,9 @@
         </template>
         <template v-if="column.key === 'createdAt'">
           {{ formatDateTimeYmdHm(record.createdAt) }}
+        </template>
+        <template v-if="column.key === 'validUntil'">
+          {{ record.validUntil ? formatDateTimeYmdHm(record.validUntil) : '-' }}
         </template>
         <template v-if="column.key === 'actions'">
           <a-space>
@@ -122,6 +131,10 @@
           </template>
 
           <template v-else-if="type === 'posts'">
+          <div class="mp-tags" v-if="detail?.postType === 'ANNOUNCEMENT' || detail?.validUntil">
+            <a-tag v-if="detail?.postType === 'ANNOUNCEMENT'" color="gold">公告</a-tag>
+            <a-tag v-if="detail?.validUntil">有效至 {{ formatDateTimeYmdHm(detail.validUntil) }}</a-tag>
+          </div>
             <div class="mp-content" v-if="detail?.content">{{ detail.content }}</div>
             <div class="mp-media" v-if="normArray(detail?.images).length || normArray(detail?.videos).length">
               <div class="mp-media-grid">
@@ -248,7 +261,7 @@
 
     <a-modal
       v-model:open="editOpen"
-      :title="editMode === 'create' ? `新建${title}` : `编辑${title}`"
+      :title="editForm.postType === 'ANNOUNCEMENT' ? (editMode === 'create' ? '发布公告' : '编辑公告') : (editMode === 'create' ? `新建${title}` : `编辑${title}`)"
       width="640px"
       :confirm-loading="editSaving"
       destroy-on-close
@@ -288,6 +301,15 @@
         </template>
 
         <template v-else-if="type === 'posts'">
+          <a-form-item label="内容类型">
+            <a-select v-model:value="editForm.postType">
+              <a-select-option value="NORMAL">普通留言</a-select-option>
+              <a-select-option value="ANNOUNCEMENT">公告</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item v-if="editForm.postType === 'ANNOUNCEMENT'" label="公告过期时间" required>
+            <a-input v-model:value="editForm.validUntil" type="datetime-local" />
+          </a-form-item>
           <a-form-item label="标题" required>
             <a-input v-model:value="editForm.title" />
           </a-form-item>
@@ -493,6 +515,8 @@ const editForm = reactive({
   contact: '',
   visibility: 'ONLINE' as ContentVisibility,
   pinned: false,
+  postType: 'NORMAL' as 'NORMAL' | 'ANNOUNCEMENT',
+  validUntil: '',
   errandStatus: undefined as string | undefined,
   taskStatus: undefined as string | undefined,
   imagesText: '',
@@ -562,15 +586,20 @@ const title = computed(() => {
   return map[type.value] || '模块管理';
 });
 
-const columns = [
-  { title: '标题', dataIndex: 'title', key: 'title', width: 220 },
-  { title: '内容', key: 'text', width: 220 },
-  { title: '是否上架', key: 'visibility', width: 108, align: 'center' as const },
-  { title: '是否置顶', key: 'pinned', width: 108, align: 'center' as const },
-  { title: '发布人', key: 'author', ellipsis: true, width: 112 },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 156 },
-  { title: '操作', key: 'actions', width: 200, fixed: 'right' as const },
-];
+const columns = computed(() => {
+  const base: any[] = [
+    { title: '标题', dataIndex: 'title', key: 'title', width: 220 },
+    { title: '内容', key: 'text', width: 220 },
+    { title: '是否上架', key: 'visibility', width: 108, align: 'center' as const },
+    { title: '是否置顶', key: 'pinned', width: 108, align: 'center' as const },
+    { title: '发布人', key: 'author', ellipsis: true, width: 112 },
+    { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 156 },
+  ];
+  if (type.value === 'posts') {
+    base.splice(5, 0, { title: '公告有效期', key: 'validUntil', width: 168 });
+  }
+  return [...base, { title: '操作', key: 'actions', width: 200, fixed: 'right' as const }];
+});
 
 async function load() {
   loading.value = true;
@@ -724,6 +753,28 @@ function uploadErrorMessage(error: unknown) {
   return errorMessage(error);
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+function toDatetimeLocalValue(value: unknown) {
+  if (!value) return '';
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function defaultAnnouncementValidUntil() {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return toDatetimeLocalValue(d.toISOString());
+}
+
+function datetimeLocalToIso(value: string) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString();
+}
+
 async function uploadToMediaField(options: any, field: MediaTextField, mediaType: AdminUploadMediaType) {
   const file = options.file instanceof File ? options.file : options.file?.originFileObj;
   if (!file) {
@@ -760,6 +811,8 @@ function resetEditForm() {
   editForm.contact = '';
   editForm.visibility = 'ONLINE';
   editForm.pinned = false;
+  editForm.postType = 'NORMAL';
+  editForm.validUntil = '';
   editForm.errandStatus = undefined;
   editForm.taskStatus = undefined;
   editForm.imagesText = '';
@@ -780,6 +833,13 @@ function openCreate() {
     editForm.actorUserId = boundUserId.value;
   }
   editOpen.value = true;
+}
+
+function openCreateAnnouncement() {
+  openCreate();
+  editForm.postType = 'ANNOUNCEMENT';
+  editForm.pinned = true;
+  editForm.validUntil = defaultAnnouncementValidUntil();
 }
 
 async function openEdit(record: ContentItem) {
@@ -803,6 +863,8 @@ async function openEdit(record: ContentItem) {
     editForm.contact = String(d.contact || '');
     editForm.visibility = d.visibility === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
     editForm.pinned = Boolean(d.pinned);
+    editForm.postType = d.postType === 'ANNOUNCEMENT' ? 'ANNOUNCEMENT' : 'NORMAL';
+    editForm.validUntil = toDatetimeLocalValue(d.validUntil);
     editForm.errandStatus = type.value === 'errands' ? String(d.status || '') : undefined;
     editForm.taskStatus = type.value === 'tasks' ? String(d.status || '') : undefined;
     if (type.value === 'items') {
@@ -855,7 +917,12 @@ function buildPayload(): Record<string, unknown> {
     Object.assign(base, {
       title: editForm.title.trim(),
       content: editForm.content.trim(),
+      postType: editForm.postType,
     });
+    if (editForm.postType === 'ANNOUNCEMENT') {
+      const validUntil = datetimeLocalToIso(editForm.validUntil);
+      if (validUntil) base.validUntil = validUntil;
+    }
     if (!isEdit || editForm.imagesText !== editMediaSnapshot.imagesText) base.images = images;
     if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
     return base;
@@ -910,6 +977,17 @@ async function submitEdit() {
     if (!editForm.title.trim()) {
       message.warning('请填写标题');
       return Promise.reject();
+    }
+    if (editForm.postType === 'ANNOUNCEMENT') {
+      const validUntil = datetimeLocalToIso(editForm.validUntil);
+      if (!validUntil) {
+        message.warning('请选择公告过期时间');
+        return Promise.reject();
+      }
+      if (new Date(validUntil).getTime() <= Date.now()) {
+        message.warning('公告过期时间必须晚于当前时间');
+        return Promise.reject();
+      }
     }
     const imgs = linesToUrls(editForm.imagesText);
     if (!editForm.content.trim() && imgs.length === 0 && linesToUrls(editForm.videosText).length === 0) {

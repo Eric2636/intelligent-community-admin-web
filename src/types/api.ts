@@ -79,6 +79,8 @@ export type ContentItem = {
   title: string;
   content?: string;
   desc?: string;
+  postType?: 'NORMAL' | 'ANNOUNCEMENT';
+  validUntil?: string | null;
   authorId?: string;
   authorName?: string;
   publisherId?: string;
