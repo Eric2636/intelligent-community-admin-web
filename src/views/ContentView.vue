@@ -1024,12 +1024,13 @@ async function submitEdit() {
     if (editMode.value === 'create') {
       await createContent(type.value, payload);
       message.success('创建成功');
+      pagination.current = 1;
     } else if (editingId.value) {
       await updateContent(type.value, editingId.value, payload);
       message.success('已保存');
     }
     editOpen.value = false;
-    load();
+    await load();
   } catch (error) {
     message.error(errorMessage(error));
     return Promise.reject(error);
