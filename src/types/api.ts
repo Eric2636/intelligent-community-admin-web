@@ -9,6 +9,15 @@ export type AdminRole = 'ADMIN' | 'SUPERADMIN';
 export type AdminType = 'OFFICIAL' | 'THIRD_PARTY';
 export type ContentVisibility = 'ONLINE' | 'OFFLINE';
 
+export type MallCategory = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AdminUser = {
   id: string;
   username: string;
@@ -85,6 +94,10 @@ export type ContentItem = {
   authorName?: string;
   publisherId?: string;
   publisherName?: string;
+  locationName?: string;
+  locationAddress?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   visibility: ContentVisibility;
   pinned: boolean;
   createdAt: string;
