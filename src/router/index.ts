@@ -3,6 +3,7 @@ import LoginView from '../views/LoginView.vue';
 import UsersView from '../views/UsersView.vue';
 import AdminsView from '../views/AdminsView.vue';
 import ContentView from '../views/ContentView.vue';
+import MallCategoriesView from '../views/MallCategoriesView.vue';
 import MiniModuleEntryView from '../views/MiniModuleEntryView.vue';
 import MiniApiErrorLogsView from '../views/MiniApiErrorLogsView.vue';
 import SystemLogsView from '../views/SystemLogsView.vue';
@@ -17,6 +18,7 @@ export const router = createRouter({
     { path: '/mini-modules', component: MiniModuleEntryView, meta: { superAdminOnly: true } },
     { path: '/mini-api-error-logs', component: MiniApiErrorLogsView, meta: { superAdminOnly: true } },
     { path: '/system-logs', component: SystemLogsView, meta: { superAdminOnly: true } },
+    { path: '/mall-categories', component: MallCategoriesView, meta: { superAdminOnly: true } },
     { path: '/contents/:type', component: ContentView },
   ],
 });

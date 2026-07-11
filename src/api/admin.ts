@@ -9,6 +9,7 @@ import type {
   ContentVisibility,
   MiniApiErrorLog,
   MiniUser,
+  MallCategory,
   ModuleEntryTabConfig,
   PageResult,
 } from '../types/api';
@@ -186,26 +187,40 @@ export async function deleteContent(type: ContentType, id: string) {
   return unwrap<{ id: string }>(await http.delete(`/api/admin/contents/${type}/${id}`));
 }
 
+export async function listMallCategories() {
+  return unwrap<MallCategory[]>(await http.get('/api/admin/mall-categories'));
+}
+
+export async function createMallCategory(data: { name: string; sortOrder?: number; enabled?: boolean }) {
+  return unwrap<MallCategory>(await http.post('/api/admin/mall-categories', data));
+}
+
+export async function updateMallCategory(
+  id: string,
+  data: { name?: string; sortOrder?: number; enabled?: boolean },
+) {
+  return unwrap<MallCategory>(await http.patch(`/api/admin/mall-categories/${id}`, data));
+}
+
+export async function deleteMallCategory(id: string) {
+  return unwrap<{ id: string }>(await http.delete(`/api/admin/mall-categories/${id}`));
+}
+
 export type AdminUploadModule = 'forum' | 'task' | 'errand' | 'mall' | 'avatar';
 export type AdminUploadMediaType = 'img' | 'vid';
 
-export async function getAdminCosCredentials(data: {
-  module: AdminUploadModule;
-  type: AdminUploadMediaType;
-}) {
-  return unwrap<{
-    bucket: string;
-    region: string;
-    envPrefix: string;
-    allowPrefix: string;
-    credentials: {
-      tmpSecretId: string;
-      tmpSecretKey: string;
-      sessionToken: string;
-    };
-    startTime: number;
-    expiredTime: number;
-  }>(await http.post('/api/admin/upload/cos/credentials', data));
+export async function uploadAdminMediaFile(
+  file: File,
+  data: {
+    module: AdminUploadModule;
+    type: AdminUploadMediaType;
+  },
+) {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('module', data.module);
+  form.append('type', data.type);
+  return unwrap<{ url: string }>(await http.post('/api/admin/upload/media', form));
 }
 
 export async function batchUpdateContentState(

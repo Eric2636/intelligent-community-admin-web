@@ -29,6 +29,10 @@
               <BugOutlined />
               <span>小程序接口日志</span>
             </a-menu-item>
+            <a-menu-item v-if="isSuperAdmin" key="/mall-categories">
+              <AppstoreOutlined />
+              <span>市场分类</span>
+            </a-menu-item>
             <a-menu-item v-if="isSuperAdmin" key="/system-logs">
               <FileSearchOutlined />
               <span>系统日志</span>
