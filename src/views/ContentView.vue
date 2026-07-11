@@ -186,6 +186,11 @@
             <div class="mp-subtime">{{ detail?.createdAt ? formatDateTimeYmdHm(detail.createdAt) : '' }}</div>
             <div class="mp-content">{{ detail?.desc || '-' }}</div>
             <div class="mp-sub">联系：{{ detail?.contact || '-' }}</div>
+            <div class="mp-kv" v-if="detail?.locationName || detail?.locationAddress || detail?.latitude || detail?.longitude">
+              <div class="mp-kv__row"><span class="mp-kv__k">门店</span>{{ detail?.locationName || '-' }}</div>
+              <div class="mp-kv__row"><span class="mp-kv__k">地址</span>{{ detail?.locationAddress || '-' }}</div>
+              <div class="mp-kv__row"><span class="mp-kv__k">坐标</span>{{ detail?.latitude || '-' }}, {{ detail?.longitude || '-' }}</div>
+            </div>
 
             <div class="mp-section-title">评论 ({{ normArray(detail?.comments).length }})</div>
             <a-list class="mp-list" size="small" :data-source="normArray(detail?.comments)" :locale="{ emptyText: '暂无评论' }">
@@ -262,7 +267,7 @@
     <a-modal
       v-model:open="editOpen"
       :title="editForm.postType === 'ANNOUNCEMENT' ? (editMode === 'create' ? '发布公告' : '编辑公告') : (editMode === 'create' ? `新建${title}` : `编辑${title}`)"
-      width="640px"
+      :width="type === 'posts' ? '760px' : '640px'"
       :confirm-loading="editSaving"
       destroy-on-close
       @ok="submitEdit"
@@ -301,27 +306,112 @@
         </template>
 
         <template v-else-if="type === 'posts'">
-          <a-form-item label="内容类型">
-            <a-select v-model:value="editForm.postType">
-              <a-select-option value="NORMAL">普通留言</a-select-option>
-              <a-select-option value="ANNOUNCEMENT">公告</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item v-if="editForm.postType === 'ANNOUNCEMENT'" label="公告过期时间" required>
-            <a-input v-model:value="editForm.validUntil" type="datetime-local" />
-          </a-form-item>
-          <a-form-item label="标题" required>
-            <a-input v-model:value="editForm.title" />
-          </a-form-item>
-          <a-form-item label="正文">
-            <a-textarea v-model:value="editForm.content" :rows="4" />
-          </a-form-item>
+          <div class="edit-post-layout">
+            <section class="edit-section">
+              <div class="edit-section__head">
+                <div>
+                  <div class="edit-section__title">基础信息</div>
+                  <div class="edit-section__sub">{{ editForm.postType === 'ANNOUNCEMENT' ? '公告会展示在小程序留言页顶部' : '普通留言会进入小区留言列表' }}</div>
+                </div>
+                <a-tag :color="editForm.postType === 'ANNOUNCEMENT' ? 'gold' : 'blue'">
+                  {{ editForm.postType === 'ANNOUNCEMENT' ? '公告' : '普通留言' }}
+                </a-tag>
+              </div>
+
+              <div class="edit-form-grid edit-form-grid--two">
+                <a-form-item label="内容类型">
+                  <a-radio-group v-model:value="editForm.postType" button-style="solid">
+                    <a-radio-button value="NORMAL">普通留言</a-radio-button>
+                    <a-radio-button value="ANNOUNCEMENT">公告</a-radio-button>
+                  </a-radio-group>
+                </a-form-item>
+                <a-form-item v-if="editForm.postType === 'ANNOUNCEMENT'" label="公告过期时间" required>
+                  <a-input v-model:value="editForm.validUntil" type="datetime-local" />
+                </a-form-item>
+              </div>
+
+              <a-form-item label="标题" required>
+                <a-input v-model:value="editForm.title" placeholder="请输入标题" />
+              </a-form-item>
+              <a-form-item label="正文">
+                <a-textarea v-model:value="editForm.content" :rows="6" placeholder="请输入正文内容" />
+              </a-form-item>
+            </section>
+
+            <section class="edit-section">
+              <div class="edit-section__head">
+                <div class="edit-section__title">图片和视频</div>
+              </div>
+              <div class="edit-form-grid edit-form-grid--two">
+                <a-form-item label="图片">
+                  <div v-if="linesToUrls(editForm.imagesText).length" class="edit-media-list edit-media-list--compact">
+                    <div v-for="(url, idx) in linesToUrls(editForm.imagesText)" :key="`${url}-${idx}`" class="edit-media-item">
+                      <a-image :src="url" />
+                      <a-button size="small" danger shape="circle" title="删除" @click="removeMediaUrl('imagesText', idx)">
+                        <template #icon><DeleteOutlined /></template>
+                      </a-button>
+                    </div>
+                  </div>
+                  <a-upload
+                    accept="image/*"
+                    :show-upload-list="false"
+                    :custom-request="(options: any) => uploadToMediaField(options, 'imagesText', 'img')"
+                  >
+                    <a-button :loading="mediaUploading.imagesText" title="上传图片" aria-label="上传图片">
+                      <template #icon><PlusOutlined /></template>
+                      上传图片
+                    </a-button>
+                  </a-upload>
+                </a-form-item>
+
+                <a-form-item label="视频">
+                  <div v-if="linesToUrls(editForm.videosText).length" class="edit-media-list edit-media-list--compact">
+                    <div v-for="(url, idx) in linesToUrls(editForm.videosText)" :key="`${url}-${idx}`" class="edit-media-item edit-media-item--video">
+                      <video :src="url" controls />
+                      <a-button size="small" danger shape="circle" title="删除" @click="removeMediaUrl('videosText', idx)">
+                        <template #icon><DeleteOutlined /></template>
+                      </a-button>
+                    </div>
+                  </div>
+                  <a-upload
+                    accept="video/*"
+                    :show-upload-list="false"
+                    :custom-request="(options: any) => uploadToMediaField(options, 'videosText', 'vid')"
+                  >
+                    <a-button :loading="mediaUploading.videosText" title="上传视频" aria-label="上传视频">
+                      <template #icon><VideoCameraOutlined /></template>
+                      上传视频
+                    </a-button>
+                  </a-upload>
+                </a-form-item>
+              </div>
+            </section>
+
+            <section class="edit-section edit-section--settings">
+              <div class="edit-section__head">
+                <div class="edit-section__title">发布设置</div>
+              </div>
+              <div class="edit-form-grid edit-form-grid--settings">
+                <a-form-item label="上架">
+                  <a-select v-model:value="editForm.visibility">
+                    <a-select-option value="ONLINE">已上架</a-select-option>
+                    <a-select-option value="OFFLINE">未上架</a-select-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item label="置顶">
+                  <a-switch v-model:checked="editForm.pinned" />
+                </a-form-item>
+              </div>
+            </section>
+          </div>
         </template>
 
         <template v-else-if="type === 'items'">
           <a-form-item label="分类" required>
             <a-select v-model:value="editForm.categoryId">
-              <a-select-option v-for="c in mallCategories" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
+              <a-select-option v-for="c in mallCategories" :key="c.id" :value="c.id" :disabled="!c.enabled">
+                {{ c.name }}{{ c.enabled ? '' : '（已停用）' }}
+              </a-select-option>
             </a-select>
           </a-form-item>
           <a-form-item label="标题" required>
@@ -336,8 +426,20 @@
           <a-form-item label="单位">
             <a-input v-model:value="editForm.unit" placeholder="默认 元" />
           </a-form-item>
-          <a-form-item label="联系方式">
-            <a-input v-model:value="editForm.contact" />
+            <a-form-item label="联系方式">
+              <a-input v-model:value="editForm.contact" />
+            </a-form-item>
+          <a-form-item label="门店名称">
+            <a-input v-model:value="editForm.locationName" placeholder="例如 洪山区人民政府店" />
+          </a-form-item>
+          <a-form-item label="门店地址">
+            <a-textarea v-model:value="editForm.locationAddress" :rows="2" placeholder="用于小程序详情页展示" />
+          </a-form-item>
+          <a-form-item label="门店经纬度">
+            <a-space compact>
+              <a-input v-model:value="editForm.latitude" placeholder="纬度 latitude" />
+              <a-input v-model:value="editForm.longitude" placeholder="经度 longitude" />
+            </a-space>
           </a-form-item>
         </template>
 
@@ -366,7 +468,7 @@
           </a-form-item>
         </template>
 
-        <a-form-item v-if="type !== 'items'" label="图片">
+        <a-form-item v-if="type !== 'items' && type !== 'posts'" label="图片">
           <div v-if="linesToUrls(editForm.imagesText).length" class="edit-media-list">
             <div v-for="(url, idx) in linesToUrls(editForm.imagesText)" :key="`${url}-${idx}`" class="edit-media-item">
               <a-image :src="url" />
@@ -423,7 +525,7 @@
             </a-button>
           </a-upload>
         </a-form-item>
-        <a-form-item label="视频">
+        <a-form-item v-if="type !== 'posts'" label="视频">
           <div v-if="linesToUrls(editForm.videosText).length" class="edit-media-list">
             <div v-for="(url, idx) in linesToUrls(editForm.videosText)" :key="`${url}-${idx}`" class="edit-media-item edit-media-item--video">
               <video :src="url" controls />
@@ -443,13 +545,13 @@
           </a-upload>
         </a-form-item>
 
-        <a-form-item label="上架">
+        <a-form-item v-if="type !== 'posts'" label="上架">
           <a-select v-model:value="editForm.visibility">
             <a-select-option value="ONLINE">已上架</a-select-option>
             <a-select-option value="OFFLINE">未上架</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="置顶">
+        <a-form-item v-if="type !== 'posts'" label="置顶">
           <a-switch v-model:checked="editForm.pinned" />
         </a-form-item>
       </a-form>
@@ -472,13 +574,14 @@ import {
   errorMessage,
   getContentDetail,
   getCurrentAdmin,
+  listMallCategories,
   listContents,
   updateContent,
   updateContentState,
 } from '../api/admin';
 import { formatDateTimeYmdHm } from '../utils/date';
 import { uploadAdminMedia } from '../utils/cosUpload';
-import type { AdminUser, ContentItem, ContentType, ContentVisibility } from '../types/api';
+import type { AdminUser, ContentItem, ContentType, ContentVisibility, MallCategory } from '../types/api';
 
 const route = useRoute();
 const loading = ref(false);
@@ -491,11 +594,7 @@ const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detail = ref<any>(null);
 
-const mallCategories = [
-  { id: 'daily', name: '日用品' },
-  { id: 'second', name: '二手闲置' },
-  { id: 'wanted', name: '求购' },
-];
+const mallCategories = ref<MallCategory[]>([]);
 
 const editOpen = ref(false);
 const editMode = ref<'create' | 'edit'>('create');
@@ -509,10 +608,14 @@ const editForm = reactive({
   desc: '',
   reward: '',
   location: '',
-  categoryId: 'daily',
+  categoryId: '',
   price: '',
   unit: '元',
   contact: '',
+  locationName: '',
+  locationAddress: '',
+  latitude: '',
+  longitude: '',
   visibility: 'ONLINE' as ContentVisibility,
   pinned: false,
   postType: 'NORMAL' as 'NORMAL' | 'ANNOUNCEMENT',
@@ -775,6 +878,26 @@ function datetimeLocalToIso(value: string) {
   return Number.isNaN(d.getTime()) ? '' : d.toISOString();
 }
 
+function optionalNumber(value: string) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function defaultMallCategoryId() {
+  return mallCategories.value.find((c) => c.enabled)?.id || mallCategories.value[0]?.id || '';
+}
+
+async function loadMallCategories() {
+  try {
+    mallCategories.value = await listMallCategories();
+    if (!editForm.categoryId) editForm.categoryId = defaultMallCategoryId();
+  } catch (error) {
+    message.error(errorMessage(error));
+  }
+}
+
 async function uploadToMediaField(options: any, field: MediaTextField, mediaType: AdminUploadMediaType) {
   const file = options.file instanceof File ? options.file : options.file?.originFileObj;
   if (!file) {
@@ -805,10 +928,14 @@ function resetEditForm() {
   editForm.desc = '';
   editForm.reward = '';
   editForm.location = '';
-  editForm.categoryId = 'daily';
+  editForm.categoryId = defaultMallCategoryId();
   editForm.price = '';
   editForm.unit = '元';
   editForm.contact = '';
+  editForm.locationName = '';
+  editForm.locationAddress = '';
+  editForm.latitude = '';
+  editForm.longitude = '';
   editForm.visibility = 'ONLINE';
   editForm.pinned = false;
   editForm.postType = 'NORMAL';
@@ -857,10 +984,14 @@ async function openEdit(record: ContentItem) {
     editForm.reward = d.reward != null ? String(d.reward) : '';
     editForm.location =
       typeof d.location === 'string' ? d.location : d.location != null ? JSON.stringify(d.location) : '';
-    editForm.categoryId = String(d.categoryId || 'daily');
+    editForm.categoryId = String(d.categoryId || defaultMallCategoryId());
     editForm.price = d.price != null ? String(d.price) : '';
     editForm.unit = String(d.unit || '元');
     editForm.contact = String(d.contact || '');
+    editForm.locationName = String(d.locationName || '');
+    editForm.locationAddress = String(d.locationAddress || '');
+    editForm.latitude = d.latitude != null ? String(d.latitude) : '';
+    editForm.longitude = d.longitude != null ? String(d.longitude) : '';
     editForm.visibility = d.visibility === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
     editForm.pinned = Boolean(d.pinned);
     editForm.postType = d.postType === 'ANNOUNCEMENT' ? 'ANNOUNCEMENT' : 'NORMAL';
@@ -936,6 +1067,10 @@ function buildPayload(): Record<string, unknown> {
       price: editForm.price.trim() || undefined,
       unit: editForm.unit.trim() || '元',
       contact: editForm.contact.trim() || undefined,
+      locationName: editForm.locationName.trim() || undefined,
+      locationAddress: editForm.locationAddress.trim() || undefined,
+      latitude: optionalNumber(editForm.latitude),
+      longitude: optionalNumber(editForm.longitude),
     });
     const mediaTouched =
       !isEdit ||
@@ -1000,6 +1135,12 @@ async function submitEdit() {
       message.warning('请填写标题和描述');
       return Promise.reject();
     }
+    const lat = editForm.latitude.trim();
+    const lng = editForm.longitude.trim();
+    if ((lat || lng) && (!lat || !lng || optionalNumber(lat) === undefined || optionalNumber(lng) === undefined)) {
+      message.warning('请填写正确的门店经纬度');
+      return Promise.reject();
+    }
   }
   if (type.value === 'tasks') {
     if (!editForm.title.trim()) {
@@ -1055,6 +1196,7 @@ function confirmDelete(record: ContentItem) {
 
 onMounted(async () => {
   await refreshAdmin();
+  await loadMallCategories();
   load();
 });
 
@@ -1172,6 +1314,10 @@ function formatLocation(v: unknown) {
   margin-bottom: 8px;
 }
 
+.edit-media-list--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .edit-media-item {
   position: relative;
   overflow: hidden;
@@ -1200,6 +1346,82 @@ function formatLocation(v: unknown) {
 
 .edit-media-item--video video {
   background: #000;
+}
+
+.edit-post-layout {
+  display: grid;
+  gap: 14px;
+}
+
+.edit-section {
+  padding: 14px 16px 2px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.edit-section--settings {
+  padding-bottom: 0;
+}
+
+.edit-section__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.edit-section__title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.edit-section__sub {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.edit-form-grid {
+  display: grid;
+  gap: 12px 16px;
+}
+
+.edit-form-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.edit-form-grid--settings {
+  grid-template-columns: minmax(220px, 1fr) 160px;
+  align-items: start;
+}
+
+.edit-post-layout :deep(.ant-form-item) {
+  margin-bottom: 14px;
+}
+
+.edit-post-layout :deep(.ant-radio-group) {
+  display: flex;
+}
+
+.edit-post-layout :deep(.ant-radio-button-wrapper) {
+  flex: 1;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .edit-form-grid--two,
+  .edit-form-grid--settings {
+    grid-template-columns: 1fr;
+  }
+
+  .edit-media-list--compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .mp-card {
