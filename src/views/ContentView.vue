@@ -417,8 +417,8 @@
           <a-form-item label="标题" required>
             <a-input v-model:value="editForm.title" />
           </a-form-item>
-          <a-form-item label="描述" required>
-            <a-textarea v-model:value="editForm.desc" :rows="4" />
+          <a-form-item label="描述">
+            <a-textarea v-model:value="editForm.desc" :rows="4" placeholder="可选" />
           </a-form-item>
           <a-form-item label="价格">
             <a-input v-model:value="editForm.price" placeholder="选填" />
@@ -1131,8 +1131,8 @@ async function submitEdit() {
     }
   }
   if (type.value === 'items') {
-    if (!editForm.title.trim() || !editForm.desc.trim()) {
-      message.warning('请填写标题和描述');
+    if (!editForm.title.trim()) {
+      message.warning('请填写标题');
       return Promise.reject();
     }
     const lat = editForm.latitude.trim();
