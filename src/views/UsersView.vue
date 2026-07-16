@@ -12,12 +12,18 @@
       :columns="columns"
       :data-source="rows"
       :pagination="pagination"
-      :scroll="{ x: 820 }"
+      :scroll="{ x: 920 }"
       @change="onTableChange"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'enabled'">
           <a-tag :color="record.enabled ? 'green' : 'red'">{{ record.enabled ? '正常' : '冻结' }}</a-tag>
+        </template>
+        <template v-if="column.key === 'contentTagLabel'">
+          <a-tag v-if="record.contentTagLabel" :color="tagColor(record.contentTagType)">
+            {{ record.contentTagLabel }}
+          </a-tag>
+          <span v-else style="color: rgba(0, 0, 0, 0.25)">-</span>
         </template>
         <template v-if="column.key === 'createdAt'">
           {{ formatDateTimeYmdHm(record.createdAt) }}
@@ -82,6 +88,7 @@ const reasonForm = reactive<{ reason: string }>({ reason: '' });
 
 const columns = [
   { title: '昵称', dataIndex: 'name', key: 'name', ellipsis: true, width: 120 },
+  { title: '用户标签', dataIndex: 'contentTagLabel', key: 'contentTagLabel', width: 110, align: 'center' as const },
   { title: '状态', key: 'enabled', width: 88, align: 'center' as const },
   { title: '冻结原因', dataIndex: 'disabledReason', key: 'disabledReason', ellipsis: true, width: 260 },
   { title: '注册时间', dataIndex: 'createdAt', key: 'createdAt', width: 156 },
@@ -109,6 +116,13 @@ function onTableChange(page: TablePaginationConfig) {
   pagination.current = page.current || 1;
   pagination.pageSize = page.pageSize || 20;
   load();
+}
+
+function tagColor(type?: MiniUser['contentTagType']) {
+  if (type === 'admin') return 'blue';
+  if (type === 'owner') return 'green';
+  if (type === 'outsider') return 'default';
+  return 'default';
 }
 
 function toggleUser(id: string, enabled: boolean) {
