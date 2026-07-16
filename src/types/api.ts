@@ -37,6 +37,8 @@ export type MiniUser = {
   openid: string;
   name?: string;
   avatar?: string;
+  contentTagLabel?: string;
+  contentTagType?: 'owner' | 'outsider' | 'admin' | '';
   gender: number;
   enabled: boolean;
   disabledAt?: string;
