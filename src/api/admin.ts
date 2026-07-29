@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { appBaseWithoutTrailingSlash, appPath } from '../config/app-base';
 import type {
   ApiRequestLog,
   ApiEndpoint,
@@ -20,8 +21,8 @@ import type {
   PublishSystemNoticeResult,
 } from '../types/api';
 
-const http = axios.create({ baseURL: '' });
-const rawHttp = axios.create({ baseURL: '' });
+const http = axios.create({ baseURL: appBaseWithoutTrailingSlash });
+const rawHttp = axios.create({ baseURL: appBaseWithoutTrailingSlash });
 
 let refreshPromise: Promise<string> | null = null;
 
@@ -68,7 +69,7 @@ http.interceptors.response.use(
       } else {
         clearAdminSession();
       }
-      if (location.pathname !== '/login') location.href = '/login';
+      if (location.pathname !== appPath('/login')) location.href = appPath('/login');
     }
     return Promise.reject(error);
   },

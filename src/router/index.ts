@@ -13,7 +13,7 @@ import ApiAccessLogsView from '../views/ApiAccessLogsView.vue';
 import FeedbacksView from '../views/FeedbacksView.vue';
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/login', component: LoginView, meta: { public: true, title: '登录' } },
     { path: '/', redirect: '/users' },
