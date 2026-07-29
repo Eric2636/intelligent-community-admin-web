@@ -7,6 +7,9 @@ RUN npm ci
 COPY index.html tsconfig.json vite.config.ts ./
 COPY src ./src
 
+ARG VITE_APP_BASE=/
+ENV VITE_APP_BASE=${VITE_APP_BASE}
+
 RUN npm run build
 
 FROM nginx:1.27-alpine
