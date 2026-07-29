@@ -1,5 +1,5 @@
 upstream admin_api {
-    server ic-admin-api:3000;
+    server ${ADMIN_API_UPSTREAM};
 }
 
 server {
