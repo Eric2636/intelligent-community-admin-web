@@ -1,5 +1,10 @@
 import axios from 'axios';
 import type {
+  ApiRequestLog,
+  ApiEndpoint,
+  ApiErrorLog,
+  ApiLogFilters,
+  AdminFeedback,
   AdminType,
   AdminSystemLog,
   AdminUser,
@@ -12,6 +17,7 @@ import type {
   MallCategory,
   ModuleEntryTabConfig,
   PageResult,
+  PublishSystemNoticeResult,
 } from '../types/api';
 
 const http = axios.create({ baseURL: '' });
@@ -206,7 +212,7 @@ export async function deleteMallCategory(id: string) {
   return unwrap<{ id: string }>(await http.delete(`/api/admin/mall-categories/${id}`));
 }
 
-export type AdminUploadModule = 'forum' | 'task' | 'errand' | 'mall' | 'avatar';
+export type AdminUploadModule = 'forum' | 'task' | 'mall' | 'avatar';
 export type AdminUploadMediaType = 'img' | 'vid';
 
 export async function uploadAdminMediaFile(
@@ -246,6 +252,29 @@ export async function listSystemLogs(params: { page?: number; pageSize?: number;
   return unwrap<PageResult<AdminSystemLog>>(await http.get('/api/admin/system-logs', { params }));
 }
 
+export async function publishSystemNotice(data: {
+  title: string;
+  content: string;
+  clientRequestId: string;
+}) {
+  return unwrap<PublishSystemNoticeResult>(
+    await http.post('/api/admin/system-notices', data),
+  );
+}
+
+export async function listAdminFeedbacks(params: {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+  identity?: 'OWNER' | 'OUTSIDER';
+  startAt?: string;
+  endAt?: string;
+}) {
+  return unwrap<PageResult<AdminFeedback>>(
+    await http.get('/api/admin/feedbacks', { params }),
+  );
+}
+
 export async function listMiniApiErrorLogs(params: {
   page?: number;
   pageSize?: number;
@@ -256,6 +285,54 @@ export async function listMiniApiErrorLogs(params: {
   return unwrap<PageResult<MiniApiErrorLog>>(
     await http.get('/api/admin/mini-api-error-logs', { params }),
   );
+}
+
+export async function listApiEndpoints(params: {
+  page?: number;
+  pageSize?: number;
+  source?: string;
+  keyword?: string;
+}) {
+  return unwrap<PageResult<ApiEndpoint>>(
+    await http.get('/api/admin/api-endpoints', { params }),
+  );
+}
+
+export async function updateApiEndpoint(
+  id: string,
+  data: { description?: string; logEnabled?: boolean },
+) {
+  return unwrap<ApiEndpoint>(
+    await http.patch(`/api/admin/api-endpoints/${id}`, data),
+  );
+}
+
+export async function listApiAccessLogs(params: ApiLogFilters) {
+  return unwrap<PageResult<ApiRequestLog>>(
+    await http.get('/api/admin/api-access-logs', { params }),
+  );
+}
+
+export async function listApiErrorLogs(params: ApiLogFilters) {
+  return unwrap<PageResult<ApiRequestLog>>(
+    await http.get('/api/admin/api-error-logs', { params }),
+  );
+}
+
+export async function exportApiAccessLogs(params: Omit<ApiLogFilters, 'page' | 'pageSize'>) {
+  const response = await http.get('/api/admin/api-access-logs/export', {
+    params,
+    responseType: 'blob',
+  });
+  return response.data as Blob;
+}
+
+export async function exportApiErrorLogs(params: Omit<ApiLogFilters, 'page' | 'pageSize'>) {
+  const response = await http.get('/api/admin/api-error-logs/export', {
+    params,
+    responseType: 'blob',
+  });
+  return response.data as Blob;
 }
 
 export function errorMessage(error: unknown) {
