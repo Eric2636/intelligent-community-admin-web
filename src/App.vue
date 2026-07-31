@@ -17,6 +17,10 @@
               <UserOutlined />
               <span>用户管理</span>
             </a-menu-item>
+            <a-menu-item key="/feedbacks">
+              <CommentOutlined />
+              <span>意见反馈</span>
+            </a-menu-item>
             <a-menu-item v-if="isSuperAdmin" key="/admins">
               <TeamOutlined />
               <span>管理员管理</span>
@@ -25,18 +29,27 @@
               <MobileOutlined />
               <span>小程序模块开关</span>
             </a-menu-item>
-            <a-menu-item v-if="isSuperAdmin" key="/mini-api-error-logs">
-              <BugOutlined />
-              <span>小程序接口日志</span>
-            </a-menu-item>
             <a-menu-item v-if="isSuperAdmin" key="/mall-categories">
               <AppstoreOutlined />
               <span>市场分类</span>
             </a-menu-item>
-            <a-menu-item v-if="isSuperAdmin" key="/system-logs">
-              <FileSearchOutlined />
-              <span>系统日志</span>
+            <a-menu-item v-if="isSuperAdmin" key="/system-notices">
+              <NotificationOutlined />
+              <span>系统通知</span>
             </a-menu-item>
+            <a-menu-item v-if="isSuperAdmin" key="/api-endpoints">
+              <ApiOutlined />
+              <span>接口日志设置</span>
+            </a-menu-item>
+            <a-sub-menu v-if="isSuperAdmin" key="log-center">
+              <template #title>
+                <FileSearchOutlined />
+                <span>日志中心</span>
+              </template>
+              <a-menu-item key="/system-logs">操作审计</a-menu-item>
+              <a-menu-item key="/api-access-logs">接口监控</a-menu-item>
+              <a-menu-item key="/mini-api-error-logs">小程序异常上报</a-menu-item>
+            </a-sub-menu>
             <a-sub-menu key="modules">
               <template #title>
                 <AppstoreOutlined />
@@ -55,10 +68,12 @@
           </div>
         </div>
       </div>
-    </a-layout-sider>
-    <a-layout>
-      <a-layout-header class="header">
+      </a-layout-sider>
+      <a-layout>
+      <a-layout-header class="header" :aria-label="`${currentRouteTitle}工具栏`">
+        <div class="header-page-context" aria-hidden="true"></div>
         <div class="header-actions">
+          <EnvironmentIndicator />
           <a-dropdown placement="bottomRight" trigger="click">
             <button class="console-account" type="button">
               <span class="account-avatar">{{ adminInitial }}</span>
@@ -113,8 +128,9 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
+  ApiOutlined,
   AppstoreOutlined,
-  BugOutlined,
+  CommentOutlined,
   DownOutlined,
   FileSearchOutlined,
   LockOutlined,
@@ -122,6 +138,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MobileOutlined,
+  NotificationOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons-vue';
@@ -129,11 +146,12 @@ import { message } from 'ant-design-vue';
 import type { MenuProps } from 'ant-design-vue';
 import { useAdminFromStorage } from './composables/use-admin-from-storage';
 import { changeMyPassword } from './api/admin';
+import EnvironmentIndicator from './components/admin/EnvironmentIndicator.vue';
 
 const route = useRoute();
 const router = useRouter();
 const collapsed = ref(false);
-const openKeys = ref<string[]>(['modules']);
+const openKeys = ref<string[]>(['modules', 'log-center']);
 const theme = {
   token: {
     colorPrimary: '#0052d9',
@@ -179,7 +197,17 @@ const adminRoleLabel = computed(() => (isSuperAdmin.value ? '超级管理员' : 
 const adminInitial = computed(() => currentAdmin.value?.username?.trim().slice(0, 1).toUpperCase() || 'A');
 const isLoginPage = computed(() => route.path === '/login');
 const selectedKeys = computed(() => [route.path]);
-
+const currentRouteTitle = computed(() => {
+  if (route.path.startsWith('/contents/')) {
+    const labels: Record<string, string> = {
+      posts: '小区留言',
+      items: '小区市场',
+      tasks: '业主互助',
+    };
+    return labels[String(route.params.type)] || '内容管理';
+  }
+  return String(route.meta.title || '智慧社区管理平台');
+});
 const changePwdOpen = ref(false);
 const changePwdSaving = ref(false);
 const changePwdForm = ref({ password: '', password2: '' });
@@ -189,6 +217,9 @@ watch(
   (path) => {
     if (path.startsWith('/contents/') && !collapsed.value && !openKeys.value.includes('modules')) {
       openKeys.value = [...openKeys.value, 'modules'];
+    }
+    if (['/system-logs', '/api-access-logs', '/api-error-logs', '/mini-api-error-logs'].includes(path) && !collapsed.value && !openKeys.value.includes('log-center')) {
+      openKeys.value = [...openKeys.value, 'log-center'];
     }
   },
   { immediate: true },
@@ -236,15 +267,23 @@ function logout() {
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value;
-  openKeys.value = collapsed.value ? [] : ['modules'];
+  openKeys.value = collapsed.value ? [] : ['modules', 'log-center'];
 }
 </script>
 
 <style scoped>
+.header-page-context {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .header-actions {
   height: 100%;
   display: flex;
   align-items: center;
+  gap: 12px;
   margin-left: auto;
 }
 

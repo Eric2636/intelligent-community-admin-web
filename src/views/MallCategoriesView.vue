@@ -1,10 +1,15 @@
 <template>
-  <div class="table-card">
-    <div class="toolbar">
-      <a-button type="primary" @click="openCreate">新增分类</a-button>
-      <a-button @click="load">刷新</a-button>
-    </div>
-    <a-table row-key="id" :loading="loading" :columns="columns" :data-source="rows" :pagination="false">
+  <div class="admin-page">
+    <PageHeader
+      title="市场分类"
+      description="维护小区市场的商品分类、展示顺序和可用状态。"
+      :breadcrumbs="['运营管理', '市场分类']"
+    >
+      <template #actions><a-button type="primary" @click="openCreate">新增分类</a-button></template>
+    </PageHeader>
+    <div class="table-card">
+    <TableToolbar :total="rows.length" :loading="loading" @refresh="load" />
+    <a-table class="data-table" row-key="id" :loading="loading" :columns="columns" :data-source="rows" :pagination="false">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'enabled'">
           <a-switch :checked="record.enabled" @change="(checked: unknown) => toggleEnabled(record, Boolean(checked))" />
@@ -40,6 +45,7 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    </div>
   </div>
 </template>
 
@@ -55,6 +61,8 @@ import {
 } from '../api/admin';
 import type { MallCategory } from '../types/api';
 import { formatDateTimeYmdHm } from '../utils/date';
+import PageHeader from '../components/admin/PageHeader.vue';
+import TableToolbar from '../components/admin/TableToolbar.vue';
 
 const loading = ref(false);
 const saving = ref(false);
@@ -134,7 +142,7 @@ async function submit() {
 async function toggleEnabled(record: MallCategory, enabled: boolean) {
   try {
     await updateMallCategory(record.id, { enabled });
-    message.success(enabled ? '已启用' : '已停用');
+    message.success(`分类“${record.name}”已${enabled ? '启用' : '停用'}`);
     await load();
   } catch (error) {
     message.error(errorMessage(error));

@@ -2,7 +2,7 @@
   <div class="login-page">
     <a-card class="login-card">
       <div class="login-title">智慧社区</div>
-      <div class="login-subtitle">腾讯云控制台风格</div>
+      <div class="login-subtitle">智慧社区管理平台</div>
       <a-form layout="vertical" :model="form" @finish="submit">
         <a-form-item label="管理员账号" name="username" :rules="[{ required: true, message: '请输入管理员账号' }]">
           <a-input v-model:value="form.username" />
@@ -44,6 +44,7 @@ async function refreshCaptcha() {
 }
 
 async function submit() {
+  if (loading.value) return;
   loading.value = true;
   try {
     const payload: any = { username: form.username, password: form.password };

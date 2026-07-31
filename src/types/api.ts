@@ -52,12 +52,88 @@ export type PageResult<T> = {
   list: T[];
 };
 
+export type PublishSystemNoticeResult = {
+  noticeId: string;
+  recipientCount: number;
+};
+
+export type AdminFeedback = {
+  id: string;
+  userId: string;
+  nickname: string;
+  avatar: string;
+  identity: string;
+  identityLabel: string;
+  content: string;
+  createdAt: string;
+};
+
+export type ApiSource = 'MINI' | 'ADMIN';
+export type ApiStatusClass = '2xx' | '3xx' | '4xx' | '5xx';
+
+export type ApiEndpoint = {
+  id: string;
+  source: ApiSource;
+  method: string;
+  routePattern: string;
+  description?: string | null;
+  moduleName?: string;
+  displayName?: string;
+  defaultDescription?: string;
+  stats?: { calls: number; errors: number; lastCalledAt?: string | null };
+  logEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ApiLogFilters = {
+  page?: number;
+  pageSize?: number;
+  ip?: string;
+  endpointId?: string;
+  method?: string;
+  source?: ApiSource;
+  httpStatus?: number;
+  statusClass?: ApiStatusClass;
+  startAt?: string;
+  endAt?: string;
+  actorId?: string;
+  minDurationMs?: number;
+  maxDurationMs?: number;
+};
+
+export type ApiRequestLog = {
+  id: string;
+  requestId: string;
+  endpointId?: string | null;
+  source: ApiSource;
+  method: string;
+  routePattern: string;
+  requestUrl?: string | null;
+  ip?: string | null;
+  userId?: string | null;
+  adminId?: string | null;
+  actorLabel?: string;
+  httpStatus: number;
+  businessCode?: number | null;
+  errorCode?: string | null;
+  errorSummary?: string | null;
+  requestSnapshot?: Record<string, unknown> | null;
+  durationMs: number;
+  createdAt: string;
+};
+
+export type ApiAccessLog = ApiRequestLog;
+
+export type ApiErrorLog = ApiRequestLog;
+
 export type AdminSystemLog = {
   id: string;
   adminId: string;
   adminUsername: string;
   ip: string;
   action: string;
+  moduleKey?: string | null;
   detail?: any;
   createdAt: string;
 };
@@ -83,7 +159,7 @@ export type MiniApiErrorLog = {
   createdAt: string;
 };
 
-export type ContentType = 'errands' | 'posts' | 'items' | 'tasks';
+export type ContentType = 'posts' | 'items' | 'tasks';
 
 export type ContentItem = {
   id: string;
@@ -114,7 +190,6 @@ export type AdminUserDetail = {
     brief?: string;
   };
   stats: {
-    errands: number;
     posts: number;
     items: number;
     tasks: number;

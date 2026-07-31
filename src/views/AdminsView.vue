@@ -1,10 +1,24 @@
 <template>
-  <div class="table-card">
-    <div class="toolbar">
-      <a-input-search v-model:value="keyword" placeholder="搜索管理员账号" style="width: 280px" @search="load" />
-      <a-button type="primary" @click="openCreate">新建管理员</a-button>
-      <a-button @click="load">刷新</a-button>
-    </div>
+  <div class="admin-page">
+    <PageHeader
+      title="管理员管理"
+      description="管理后台账号、角色、所属单位及其绑定的小程序用户。"
+      :breadcrumbs="['用户与权限', '管理员管理']"
+    >
+      <template #actions>
+        <a-button type="primary" @click="openCreate">新建管理员</a-button>
+      </template>
+    </PageHeader>
+    <div class="table-card">
+    <CompactSearchBar
+      v-model="keyword"
+      placeholder="搜索管理员账号"
+      @search="submitSearch"
+    />
+    <a-alert v-if="loadError" class="load-alert" type="error" show-icon :message="loadError">
+      <template #action><a-button size="small" @click="load()">重新加载</a-button></template>
+    </a-alert>
+    <TableToolbar :total="Number(pagination.total || 0)" :loading="loading" @refresh="load()" />
     <a-table
       class="data-table"
       size="middle"
@@ -14,6 +28,8 @@
       :data-source="rows"
       :pagination="pagination"
       :scroll="{ x: 1200 }"
+      :sticky="{ offsetHeader: 56 }"
+      :locale="{ emptyText: keyword ? '没有符合当前搜索条件的管理员' : '暂无管理员数据' }"
       @change="onTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -32,7 +48,7 @@
           <span class="mono">{{ record.boundUserId ? (boundUserNameMap[String(record.boundUserId)] || record.boundUserId) : '-' }}</span>
         </template>
         <template v-if="column.key === 'enabled'">
-          <a-tag :color="record.enabled ? 'green' : 'red'">{{ record.enabled ? '启用' : '停用' }}</a-tag>
+          <a-tag :color="record.enabled ? 'green' : 'red'">{{ record.enabled ? '正常' : '已停用' }}</a-tag>
         </template>
         <template v-if="column.key === 'lastLoginAt'">
           {{ formatDateTimeYmdHm(record.lastLoginAt) }}
@@ -41,25 +57,44 @@
           {{ formatDateTimeYmdHm(record.createdAt) }}
         </template>
         <template v-if="column.key === 'action'">
-          <a-space wrap>
-            <a-button type="link" size="small" @click="handleBindClick(record)">{{ record.boundUserId ? '取消绑定' : '绑定用户' }}</a-button>
-            <template v-if="record.role !== 'SUPERADMIN'">
-              <a-button type="link" size="small" @click="openEdit(record)">编辑</a-button>
+          <a-space :size="4">
+            <a-tooltip :title="record.boundUserId ? '取消绑定用户' : '绑定小程序用户'">
               <a-button
-                v-if="isSuperAdmin && record.id !== currentAdminId"
-                type="link"
-                size="small"
-                @click="confirmSuperResetPassword(record)"
+                type="text"
+                shape="circle"
+                :aria-label="record.boundUserId ? '取消绑定用户' : '绑定小程序用户'"
+                @click="handleBindClick(record)"
               >
-                重置密码
+                <template #icon><DisconnectOutlined v-if="record.boundUserId" /><LinkOutlined v-else /></template>
               </a-button>
-              <a-button type="link" size="small" danger @click="confirmDelete(record)">删除</a-button>
-              <a-switch
-                :checked="record.enabled"
-                checked-children="启用"
-                un-checked-children="停用"
-                @change="(checked: unknown) => toggleAdmin(record.id, Boolean(checked))"
-              />
+            </a-tooltip>
+            <template v-if="record.role !== 'SUPERADMIN'">
+              <a-tooltip title="编辑管理员">
+                <a-button type="text" shape="circle" aria-label="编辑管理员" @click="openEdit(record)">
+                  <template #icon><EditOutlined /></template>
+                </a-button>
+              </a-tooltip>
+              <a-tooltip v-if="isSuperAdmin && record.id !== currentAdminId" title="重置密码">
+                <a-button type="text" shape="circle" aria-label="重置密码" @click="confirmSuperResetPassword(record)">
+                  <template #icon><KeyOutlined /></template>
+                </a-button>
+              </a-tooltip>
+              <a-tooltip title="删除管理员">
+                <a-button type="text" shape="circle" danger aria-label="删除管理员" @click="confirmDelete(record)">
+                  <template #icon><DeleteOutlined /></template>
+                </a-button>
+              </a-tooltip>
+              <a-tooltip :title="record.enabled ? '停用管理员' : '启用管理员'">
+                  <a-button
+                    type="text"
+                    shape="circle"
+                    :danger="record.enabled"
+                    :aria-label="record.enabled ? '停用管理员' : '启用管理员'"
+                    @click="toggleAdmin(record)"
+                  >
+                    <template #icon><StopOutlined v-if="record.enabled" /><CheckCircleOutlined v-else /></template>
+                  </a-button>
+              </a-tooltip>
             </template>
           </a-space>
         </template>
@@ -114,7 +149,8 @@
             :not-found-content="bindUserLoading ? '加载中…' : '无匹配用户'"
             :loading="bindUserLoading"
             placeholder="输入昵称或 OpenID 搜索"
-            @search="fetchBindUsers"
+            @search="captureBindUserKeyword"
+            @inputKeyDown="submitBindUserSearch"
           >
             <a-select-option v-for="u in bindUserOptions" :key="u.id" :value="u.id" :disabled="takenBoundUserIds.has(u.id)">
               {{ (u.name || '未命名') + '（' + u.id + '）' }}
@@ -132,19 +168,35 @@
         <a-button type="primary" style="width: 88px" @click="copyResetResultPassword">复制</a-button>
       </a-input-group>
     </a-modal>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { Modal, message } from 'ant-design-vue';
+import {
+  CheckCircleOutlined,
+  DeleteOutlined,
+  DisconnectOutlined,
+  EditOutlined,
+  KeyOutlined,
+  LinkOutlined,
+  StopOutlined,
+} from '@ant-design/icons-vue';
 import type { TablePaginationConfig } from 'ant-design-vue';
 import { createAdmin, deleteAdmin, errorMessage, listAdmins, listUsers, listUsersMiniByIds, superAdminResetAdminPasswordRandom, updateAdmin } from '../api/admin';
 import { useAdminFromStorage } from '../composables/use-admin-from-storage';
 import { formatDateTimeYmdHm } from '../utils/date';
+import { submitOnPlainEnter } from '../utils/keyboard';
+import { createLatestRequestRunner } from '../utils/latest-request';
 import type { AdminType, AdminUser } from '../types/api';
+import PageHeader from '../components/admin/PageHeader.vue';
+import TableToolbar from '../components/admin/TableToolbar.vue';
+import CompactSearchBar from '../components/admin/CompactSearchBar.vue';
 
 const loading = ref(false);
+const loadError = ref('');
 const creating = ref(false);
 const createOpen = ref(false);
 const editOpen = ref(false);
@@ -157,6 +209,7 @@ const bindTargetId = ref<string | null>(null);
 const keyword = ref('');
 const rows = ref<AdminUser[]>([]);
 const pagination = reactive<TablePaginationConfig>({ current: 1, pageSize: 20, total: 0 });
+const listRequest = createLatestRequestRunner();
 const form = reactive<{
   username: string;
   password: string;
@@ -176,6 +229,7 @@ const editForm = reactive<{ type: AdminType; orgName: string }>({
 const bindForm = reactive<{ boundUserId: string }>({ boundUserId: '' });
 const bindUserOptions = ref<Array<{ id: string; name: string; openid: string }>>([]);
 const bindUserLoading = ref(false);
+const bindUserKeyword = ref('');
 const boundUserNameMap = ref<Record<string, string>>({});
 const takenBoundUserIds = ref<Set<string>>(new Set());
 
@@ -196,34 +250,50 @@ const columns = [
   { title: '状态', key: 'enabled', width: 88, align: 'center' as const },
   { title: '最近登录', dataIndex: 'lastLoginAt', key: 'lastLoginAt', width: 156 },
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 156 },
-  { title: '操作', key: 'action', width: 460, align: 'center' as const },
+  { title: '操作', key: 'action', width: 220, fixed: 'right' as const, align: 'center' as const },
 ];
 
-async function load() {
-  loading.value = true;
-  try {
-    const data = await listAdmins({
-      page: pagination.current,
-      pageSize: pagination.pageSize,
-      keyword: keyword.value || undefined,
-    });
-    rows.value = data.list;
-    pagination.total = data.total;
-    // 将 boundUserId 映射成用户名称
-    const ids = [...new Set(data.list.map((x) => String(x.boundUserId || '').trim()).filter(Boolean))];
-    if (ids.length) {
-      const mini = await listUsersMiniByIds(ids);
-      const m: Record<string, string> = {};
-      for (const u of mini) m[u.id] = u.name || u.openid || u.id;
-      boundUserNameMap.value = m;
-    } else {
+async function load(deduplicate = false) {
+  const params = {
+    page: pagination.current,
+    pageSize: pagination.pageSize,
+    keyword: keyword.value || undefined,
+  };
+  await listRequest.run({
+    key: JSON.stringify(params),
+    deduplicate,
+    request: async () => {
+      const data = await listAdmins(params);
+      const ids = [...new Set(data.list.map((x) => String(x.boundUserId || '').trim()).filter(Boolean))];
+      const names: Record<string, string> = {};
+      if (ids.length) {
+        const mini = await listUsersMiniByIds(ids);
+        for (const user of mini) names[user.id] = user.name || user.openid || user.id;
+      }
+      return { data, names };
+    },
+    onSuccess: ({ data, names }) => {
+      loadError.value = '';
+      rows.value = data.list;
+      pagination.total = data.total;
+      boundUserNameMap.value = names;
+    },
+    onError: (error) => {
+      rows.value = [];
+      pagination.total = 0;
       boundUserNameMap.value = {};
-    }
-  } catch (error) {
-    message.error(errorMessage(error));
-  } finally {
-    loading.value = false;
-  }
+      loadError.value = errorMessage(error);
+      message.error(loadError.value);
+    },
+    onLoading: (value) => {
+      loading.value = value;
+    },
+  });
+}
+
+function submitSearch() {
+  pagination.current = 1;
+  load(true);
 }
 
 function onTableChange(page: TablePaginationConfig) {
@@ -268,6 +338,7 @@ function openBind(record: AdminUser) {
   bindTargetId.value = record.id;
   bindForm.boundUserId = record.boundUserId || '';
   bindUserOptions.value = [];
+  bindUserKeyword.value = '';
   const targetId = record.id;
   takenBoundUserIds.value = new Set(
     rows.value
@@ -281,6 +352,15 @@ function openBind(record: AdminUser) {
 }
 
 let bindUserReqSeq = 0;
+
+function captureBindUserKeyword(value: string) {
+  bindUserKeyword.value = value;
+}
+
+function submitBindUserSearch(event: KeyboardEvent) {
+  submitOnPlainEnter(event, () => fetchBindUsers(bindUserKeyword.value), { stopPropagation: true });
+}
+
 async function fetchBindUsers(keyword: string) {
   bindUserLoading.value = true;
   const seq = ++bindUserReqSeq;
@@ -423,18 +503,25 @@ function confirmDelete(record: AdminUser) {
   });
 }
 
-function toggleAdmin(id: string, enabled: boolean) {
+function toggleAdmin(record: AdminUser) {
+  const enabled = !record.enabled;
   Modal.confirm({
     title: enabled ? '确认启用管理员？' : '确认停用管理员？',
+    content: enabled
+      ? `启用后，管理员“${record.username}”可以恢复登录和后台操作。`
+      : `停用后，管理员“${record.username}”将无法继续登录后台。`,
+    okText: enabled ? '启用' : '停用',
+    okType: enabled ? 'primary' : 'danger',
     async onOk() {
-      await updateAdmin(id, { enabled });
-      message.success('操作成功');
+      await updateAdmin(record.id, { enabled });
+      message.success(`管理员“${record.username}”已${enabled ? '启用' : '停用'}`);
       load();
     },
   });
 }
 
 onMounted(load);
+onUnmounted(listRequest.dispose);
 </script>
 
 <style scoped>

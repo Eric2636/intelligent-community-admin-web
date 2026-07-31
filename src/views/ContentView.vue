@@ -1,18 +1,40 @@
 <template>
-  <div class="table-card">
-    <div class="toolbar">
-      <a-input-search v-model:value="keyword" :placeholder="`搜索${title}`" style="width: 280px" @search="load" />
-      <a-select v-model:value="visibility" style="width: 160px" @change="load" placeholder="是否上架">
-        <a-select-option value="">全部</a-select-option>
-        <a-select-option value="ONLINE">已上架</a-select-option>
-        <a-select-option value="OFFLINE">未上架</a-select-option>
-      </a-select>
-      <a-button v-if="canCreateContent" type="primary" @click="openCreate">新建</a-button>
-      <a-button v-if="canCreateContent && type === 'posts'" type="primary" ghost @click="openCreateAnnouncement">
-        发布公告
-      </a-button>
-      <a-button @click="load">刷新</a-button>
-    </div>
+  <div class="admin-page">
+    <PageHeader
+      :title="title"
+      :description="pageDescription"
+      :breadcrumbs="['模块管理', title]"
+    >
+      <template #actions>
+        <a-button v-if="canCreateContent" type="primary" @click="openCreate">新建{{ title }}</a-button>
+        <a-button v-if="canCreateContent && type === 'posts'" @click="openCreateAnnouncement">
+          发布公告
+        </a-button>
+      </template>
+    </PageHeader>
+    <div class="table-card">
+    <FilterPanel>
+      <label class="filter-field filter-field--wide">
+        <span class="filter-field__label">关键词</span>
+        <a-input-search v-model:value="keyword" :placeholder="`搜索${title}`" allow-clear @search="submitSearch" />
+      </label>
+      <label class="filter-field">
+        <span class="filter-field__label">上架状态</span>
+        <a-select v-model:value="visibility" placeholder="全部状态">
+          <a-select-option value="">全部状态</a-select-option>
+          <a-select-option value="ONLINE">已上架</a-select-option>
+          <a-select-option value="OFFLINE">已下架</a-select-option>
+        </a-select>
+      </label>
+      <template #actions>
+        <a-button type="primary" @click="submitSearch">查询</a-button>
+        <a-button @click="resetSearch">重置</a-button>
+      </template>
+    </FilterPanel>
+    <a-alert v-if="loadError" class="load-alert" type="error" show-icon :message="loadError">
+      <template #action><a-button size="small" @click="load()">重新加载</a-button></template>
+    </a-alert>
+    <TableToolbar :total="Number(pagination.total || 0)" :loading="loading" @refresh="load()" />
     <a-table
       class="data-table"
       size="middle"
@@ -22,6 +44,8 @@
       :data-source="rows"
       :pagination="pagination"
       :scroll="{ x: 1120 }"
+      :sticky="{ offsetHeader: 56 }"
+      :locale="{ emptyText: keyword || visibility ? '没有符合当前筛选条件的内容' : `暂无${title}数据` }"
       @change="onTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -39,27 +63,13 @@
           </a-tooltip>
         </template>
         <template v-if="column.key === 'visibility'">
-          <a-switch
-            :key="`visibility-${record.__rowKey}`"
-            size="small"
-            :disabled="!canModifyContent(record)"
-            :checked="record.visibility === 'ONLINE'"
-            @change="(checked: unknown) => toggleVisibility(record.id, Boolean(checked))"
-          />
+          <a-tag :color="record.visibility === 'ONLINE' ? 'green' : 'default'">
+            {{ record.visibility === 'ONLINE' ? '已上架' : '已下架' }}
+          </a-tag>
         </template>
         <template v-if="column.key === 'pinned'">
-          <span
-            class="switch-click-area"
-            :class="{ disabled: !canModifyContent(record) }"
-            @click.stop="canModifyContent(record) && togglePinnedById(record.id)"
-          >
-            <a-switch
-              :key="`pinned-${record.__rowKey}`"
-              size="small"
-              :disabled="!canModifyContent(record)"
-              :checked="Boolean(record.pinned)"
-            />
-          </span>
+          <a-tag v-if="record.pinned" color="blue">已置顶</a-tag>
+          <span v-else class="table-empty-value">—</span>
         </template>
         <template v-if="column.key === 'author'">
           {{ recordAuthorName(record) || '-' }}
@@ -72,9 +82,20 @@
         </template>
         <template v-if="column.key === 'actions'">
           <a-space>
-            <a-button size="small" @click="openDetail(record.id)">详情</a-button>
-            <a-button v-if="canModifyContent(record)" size="small" @click="openEdit(record)">编辑</a-button>
-            <a-button v-if="canModifyContent(record)" size="small" danger @click="confirmDelete(record)">删除</a-button>
+            <a-button type="link" size="small" @click="openDetail(record.id)">详情</a-button>
+            <a-button
+              v-if="canModifyContent(record)"
+              type="link"
+              size="small"
+              @click="toggleVisibility(record.id, record.visibility !== 'ONLINE')"
+            >
+              {{ record.visibility === 'ONLINE' ? '下架' : '上架' }}
+            </a-button>
+            <a-button v-if="canModifyContent(record)" type="link" size="small" @click="togglePinnedById(record.id)">
+              {{ record.pinned ? '取消置顶' : '置顶' }}
+            </a-button>
+            <a-button v-if="canModifyContent(record)" type="link" size="small" @click="openEdit(record)">编辑</a-button>
+            <a-button v-if="canModifyContent(record)" type="link" size="small" danger @click="confirmDelete(record)">删除</a-button>
           </a-space>
         </template>
       </template>
@@ -100,37 +121,7 @@
           <div class="mp-title">{{ detail?.title || '-' }}</div>
 
           <!-- Content blocks per type -->
-          <template v-if="type === 'errands'">
-            <div class="mp-content" v-if="detail?.content">{{ detail.content }}</div>
-            <div class="mp-row mp-row--space">
-              <div class="mp-reward">¥{{ detail?.reward ?? '0' }}</div>
-              <div class="mp-status">{{ detail?.statusText || detail?.status || '-' }}</div>
-            </div>
-            <div class="mp-hint">佣金由双方线下自行结算，平台不参与支付</div>
-            <div class="mp-sub" v-if="detail?.claimerName && String(detail?.status || '').toLowerCase() !== 'pending_take'">
-              接单人：{{ detail.claimerName }}
-            </div>
-            <div class="mp-meta">
-              <span>浏览 {{ detail?.viewCount ?? 0 }}</span>
-              <span>回复 {{ detail?.replyCount ?? 0 }}</span>
-              <span>点赞 {{ detail?.likeCount ?? 0 }}</span>
-            </div>
-
-            <div class="mp-section-title">全部回复 ({{ normArray(detail?.replies).length }})</div>
-            <a-list class="mp-list" size="small" :data-source="normArray(detail?.replies)" :locale="{ emptyText: '暂无回复' }">
-              <template #renderItem="{ item }">
-                <a-list-item class="mp-reply">
-                  <div class="mp-reply__head">
-                    <span class="mp-reply__author">{{ item.authorName || '用户' }}</span>
-                    <span class="mp-reply__time">{{ item.createTime ? formatDateTimeYmdHm(item.createTime) : '' }}</span>
-                  </div>
-                  <div class="mp-reply__content">{{ item.content || '-' }}</div>
-                </a-list-item>
-              </template>
-            </a-list>
-          </template>
-
-          <template v-else-if="type === 'posts'">
+          <template v-if="type === 'posts'">
           <div class="mp-tags" v-if="detail?.postType === 'ANNOUNCEMENT' || detail?.validUntil">
             <a-tag v-if="detail?.postType === 'ANNOUNCEMENT'" color="gold">公告</a-tag>
             <a-tag v-if="detail?.validUntil">有效至 {{ formatDateTimeYmdHm(detail.validUntil) }}</a-tag>
@@ -286,26 +277,7 @@
           />
         </a-form-item>
 
-        <template v-if="type === 'errands'">
-          <a-form-item label="标题" required>
-            <a-input v-model:value="editForm.title" />
-          </a-form-item>
-          <a-form-item label="内容" required>
-            <a-textarea v-model:value="editForm.content" :rows="4" />
-          </a-form-item>
-          <a-form-item label="佣金（元）" :required="editMode === 'create'">
-            <a-input v-model:value="editForm.reward" placeholder="例如 10" />
-          </a-form-item>
-          <a-form-item v-if="editMode === 'edit'" label="状态">
-            <a-select v-model:value="editForm.errandStatus" allow-clear placeholder="不修改">
-              <a-select-option value="PENDING_TAKE">待领取</a-select-option>
-              <a-select-option value="IN_PROGRESS">进行中</a-select-option>
-              <a-select-option value="COMPLETED">已完成</a-select-option>
-            </a-select>
-          </a-form-item>
-        </template>
-
-        <template v-else-if="type === 'posts'">
+        <template v-if="type === 'posts'">
           <div class="edit-post-layout">
             <section class="edit-section">
               <div class="edit-section__head">
@@ -456,16 +428,6 @@
           <a-form-item label="地点">
             <a-input v-model:value="editForm.location" />
           </a-form-item>
-          <a-form-item v-if="editMode === 'edit'" label="状态">
-            <a-select v-model:value="editForm.taskStatus" allow-clear placeholder="不修改">
-              <a-select-option value="DRAFT">草稿</a-select-option>
-              <a-select-option value="PENDING_TAKE">待领取</a-select-option>
-              <a-select-option value="IN_PROGRESS">进行中</a-select-option>
-              <a-select-option value="PENDING_CONFIRM">待确认</a-select-option>
-              <a-select-option value="COMPLETED">已完成</a-select-option>
-              <a-select-option value="CANCELLED">已取消</a-select-option>
-            </a-select>
-          </a-form-item>
         </template>
 
         <a-form-item v-if="type !== 'items' && type !== 'posts'" label="图片">
@@ -557,11 +519,12 @@
       </a-form>
       </a-spin>
     </a-modal>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { DeleteOutlined, FileImageOutlined, PlusOutlined, VideoCameraOutlined } from '@ant-design/icons-vue';
 import { Modal, message } from 'ant-design-vue';
@@ -581,14 +544,20 @@ import {
 } from '../api/admin';
 import { formatDateTimeYmdHm } from '../utils/date';
 import { uploadAdminMedia } from '../utils/cosUpload';
+import { createLatestRequestRunner } from '../utils/latest-request';
 import type { AdminUser, ContentItem, ContentType, ContentVisibility, MallCategory } from '../types/api';
+import FilterPanel from '../components/admin/FilterPanel.vue';
+import PageHeader from '../components/admin/PageHeader.vue';
+import TableToolbar from '../components/admin/TableToolbar.vue';
 
 const route = useRoute();
 const loading = ref(false);
+const loadError = ref('');
 const keyword = ref('');
 const visibility = ref<'' | ContentVisibility>('');
 const rows = ref<ContentItem[]>([]);
 const pagination = reactive<TablePaginationConfig>({ current: 1, pageSize: 20, total: 0 });
+const listRequest = createLatestRequestRunner();
 
 const detailOpen = ref(false);
 const detailLoading = ref(false);
@@ -620,8 +589,6 @@ const editForm = reactive({
   pinned: false,
   postType: 'NORMAL' as 'NORMAL' | 'ANNOUNCEMENT',
   validUntil: '',
-  errandStatus: undefined as string | undefined,
-  taskStatus: undefined as string | undefined,
   imagesText: '',
   videosText: '',
   mainImagesText: '',
@@ -681,56 +648,86 @@ function canModifyContent(record: ContentItem): boolean {
 const type = computed(() => route.params.type as ContentType);
 const title = computed(() => {
   const map: Record<ContentType, string> = {
-    errands: '跑腿',
     posts: '小区留言',
     items: '小区市场',
     tasks: '业主互助',
   };
   return map[type.value] || '模块管理';
 });
+const pageDescription = computed(() => {
+  const map: Record<ContentType, string> = {
+    posts: '审核和维护居民留言、社区公告、回复及置顶状态。',
+    items: '管理小区市场商品、分类、上下架状态及评论内容。',
+    tasks: '查看业主互助任务及其业务状态，处理违规内容。',
+  };
+  return map[type.value] || '维护社区业务内容。';
+});
 
 const columns = computed(() => {
   const base: any[] = [
     { title: '标题', dataIndex: 'title', key: 'title', width: 220 },
     { title: '内容', key: 'text', width: 220 },
-    { title: '是否上架', key: 'visibility', width: 108, align: 'center' as const },
-    { title: '是否置顶', key: 'pinned', width: 108, align: 'center' as const },
+    { title: '上架状态', key: 'visibility', width: 108, align: 'center' as const },
+    { title: '置顶状态', key: 'pinned', width: 108, align: 'center' as const },
     { title: '发布人', key: 'author', ellipsis: true, width: 112 },
     { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 156 },
   ];
   if (type.value === 'posts') {
     base.splice(5, 0, { title: '公告有效期', key: 'validUntil', width: 168 });
   }
-  return [...base, { title: '操作', key: 'actions', width: 200, fixed: 'right' as const }];
+  return [...base, { title: '操作', key: 'actions', width: 320, fixed: 'right' as const }];
 });
 
-async function load() {
-  loading.value = true;
-  try {
-    const data = await listContents(type.value, {
-      page: pagination.current,
-      pageSize: pagination.pageSize,
-      keyword: keyword.value || undefined,
-      visibility: visibility.value || undefined,
-    });
-    // 行 key 必须稳定且唯一，否则 a-table 会复用错行 DOM，出现“点第 N 个开关却影响第 1 个”的错位
-    rows.value = (data.list || []).map((r: any, idx: number) => {
-      const id = String(r?.id || r?._id || '').trim();
-      const fallback = `${type.value}:${pagination.current}:${idx}`;
-      const rowKey = id || fallback;
-      return {
-        ...r,
-        id,
-        __rowKey: rowKey,
-        pinned: Boolean(r?.pinned),
-      };
-    });
-    pagination.total = data.total;
-  } catch (error) {
-    message.error(errorMessage(error));
-  } finally {
-    loading.value = false;
-  }
+async function load(deduplicate = false) {
+  const requestType = type.value;
+  const requestPage = pagination.current;
+  const params = {
+    page: requestPage,
+    pageSize: pagination.pageSize,
+    keyword: keyword.value || undefined,
+    visibility: visibility.value || undefined,
+  };
+  await listRequest.run({
+    key: JSON.stringify({ type: requestType, ...params }),
+    deduplicate,
+    request: () => listContents(requestType, params),
+    onSuccess: (data) => {
+      loadError.value = '';
+      // 行 key 必须稳定且唯一，否则 a-table 会复用错行 DOM，出现“点第 N 个开关却影响第 1 个”的错位
+      rows.value = (data.list || []).map((row: any, index: number) => {
+        const id = String(row?.id || row?._id || '').trim();
+        const fallback = `${requestType}:${requestPage}:${index}`;
+        return {
+          ...row,
+          id,
+          __rowKey: id || fallback,
+          pinned: Boolean(row?.pinned),
+        };
+      });
+      pagination.total = data.total;
+    },
+    onError: (error) => {
+      rows.value = [];
+      pagination.total = 0;
+      loadError.value = errorMessage(error);
+      message.error(loadError.value);
+    },
+    onLoading: (value) => {
+      loading.value = value;
+    },
+  });
+}
+
+function submitSearch() {
+  pagination.current = 1;
+  load(true);
+}
+
+function resetSearch() {
+  keyword.value = '';
+  visibility.value = '';
+  pagination.current = 1;
+  load(true);
 }
 
 function onTableChange(page: TablePaginationConfig) {
@@ -745,6 +742,7 @@ const shelfHelpOffline =
   '下架后：小程序端列表与详情中不再展示该条内容，用户无法通过常规入口看到；数据仍保留在后台，可随时重新上架。';
 
 function toggleVisibility(id: string, online: boolean) {
+  const contentTitle = rows.value.find((item) => item.id === id)?.title?.trim() || id;
   Modal.confirm({
     title: online ? '确认上架？' : '确认下架？',
     content: online ? shelfHelpOnline : shelfHelpOffline,
@@ -752,7 +750,7 @@ function toggleVisibility(id: string, online: boolean) {
     cancelText: '取消',
     async onOk() {
       await updateContentState(type.value, id, { visibility: online ? 'ONLINE' : 'OFFLINE' });
-      message.success('操作成功');
+      message.success(`已${online ? '上架' : '下架'}${title.value}《${contentTitle}》`);
       // 上下架会影响列表可见性与排序；回到第一页避免“操作后当前页看不到”造成误判
       pagination.current = 1;
       load();
@@ -785,7 +783,7 @@ function togglePinnedById(rawId: string) {
         rows.value = rows.value.map((item) =>
           String(item.id || '').trim() === id ? { ...item, pinned: nextPinned } : item,
         );
-        message.success('操作成功');
+        message.success(`已${nextPinned ? '置顶' : '取消置顶'}${title.value}《${row.title?.trim() || id}》`);
       } catch (error) {
         message.error(errorMessage(error));
       }
@@ -825,7 +823,6 @@ function urlsToLines(arr: unknown): string {
 
 function contentUploadModule(): AdminUploadModule {
   const map: Record<ContentType, AdminUploadModule> = {
-    errands: 'errand',
     posts: 'forum',
     items: 'mall',
     tasks: 'task',
@@ -940,8 +937,6 @@ function resetEditForm() {
   editForm.pinned = false;
   editForm.postType = 'NORMAL';
   editForm.validUntil = '';
-  editForm.errandStatus = undefined;
-  editForm.taskStatus = undefined;
   editForm.imagesText = '';
   editForm.videosText = '';
   editForm.mainImagesText = '';
@@ -996,8 +991,6 @@ async function openEdit(record: ContentItem) {
     editForm.pinned = Boolean(d.pinned);
     editForm.postType = d.postType === 'ANNOUNCEMENT' ? 'ANNOUNCEMENT' : 'NORMAL';
     editForm.validUntil = toDatetimeLocalValue(d.validUntil);
-    editForm.errandStatus = type.value === 'errands' ? String(d.status || '') : undefined;
-    editForm.taskStatus = type.value === 'tasks' ? String(d.status || '') : undefined;
     if (type.value === 'items') {
       const main = normArray(d.mainImages);
       const sub = normArray(d.subImages);
@@ -1033,17 +1026,6 @@ function buildPayload(): Record<string, unknown> {
   };
   if (editForm.actorUserId.trim()) base.actorUserId = editForm.actorUserId.trim();
 
-  if (type.value === 'errands') {
-    Object.assign(base, {
-      title: editForm.title.trim(),
-      content: editForm.content.trim(),
-      reward: editForm.reward.trim(),
-    });
-    if (!isEdit || editForm.imagesText !== editMediaSnapshot.imagesText) base.images = images;
-    if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
-    if (isEdit && editForm.errandStatus) base.status = editForm.errandStatus;
-    return base;
-  }
   if (type.value === 'posts') {
     Object.assign(base, {
       title: editForm.title.trim(),
@@ -1092,22 +1074,11 @@ function buildPayload(): Record<string, unknown> {
   });
   if (!isEdit || editForm.imagesText !== editMediaSnapshot.imagesText) base.images = images;
   if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
-  if (isEdit && editForm.taskStatus) base.status = editForm.taskStatus;
   return base;
 }
 
 async function submitEdit() {
   const payload = buildPayload();
-  if (type.value === 'errands') {
-    if (!editForm.title.trim() || !editForm.content.trim()) {
-      message.warning('请填写标题和内容');
-      return Promise.reject();
-    }
-    if (editMode.value === 'create' && !editForm.reward.trim()) {
-      message.warning('请填写佣金');
-      return Promise.reject();
-    }
-  }
   if (type.value === 'posts') {
     if (!editForm.title.trim()) {
       message.warning('请填写标题');
@@ -1181,14 +1152,15 @@ async function submitEdit() {
 }
 
 function confirmDelete(record: ContentItem) {
+  const contentName = record.title?.trim() || record.id;
   Modal.confirm({
-    title: '确认删除该条内容？',
-    content: '删除后不可恢复；若商品存在订单将无法删除。',
+    title: `确认删除“${contentName}”？`,
+    content: '删除后无法恢复，该操作会记录到操作审计；若商品存在订单将无法删除。',
     okText: '删除',
     okType: 'danger',
     async onOk() {
       await deleteContent(type.value, record.id);
-      message.success('已删除');
+      message.success(`${title.value}“${contentName}”已删除`);
       load();
     },
   });
@@ -1199,6 +1171,7 @@ onMounted(async () => {
   await loadMallCategories();
   load();
 });
+onUnmounted(listRequest.dispose);
 
 function titleTooltip(record: ContentItem) {
   const t = record.title?.trim();
@@ -1261,19 +1234,6 @@ function formatLocation(v: unknown) {
 
 .content-text-cell {
   color: rgba(0, 0, 0, 0.65);
-}
-
-.switch-click-area {
-  display: inline-flex;
-  cursor: pointer;
-}
-
-.switch-click-area.disabled {
-  cursor: not-allowed;
-}
-
-.switch-click-area :deep(.ant-switch) {
-  pointer-events: none;
 }
 
 .detail-json {

@@ -1,9 +1,12 @@
 <template>
-  <div class="table-card">
-    <div class="toolbar">
-      <span class="hint">控制小程序底部 Tab 与各模块入口是否展示；用户下次打开或拉取配置后生效。</span>
-      <a-button @click="load">刷新</a-button>
-    </div>
+  <div class="admin-page">
+    <PageHeader
+      title="小程序入口管理"
+      description="控制小程序底部 Tab 与各模块入口是否显示；用户下次打开或重新拉取配置后生效。"
+      :breadcrumbs="['系统管理', '小程序入口管理']"
+    />
+    <div class="table-card">
+    <TableToolbar :total="rows.length" :loading="loading" @refresh="load" />
     <a-table
       class="data-table"
       size="middle"
@@ -26,6 +29,7 @@
         </template>
       </template>
     </a-table>
+    </div>
   </div>
 </template>
 
@@ -34,6 +38,8 @@ import { onMounted, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { errorMessage, listModuleEntryTabsAdmin, setModuleEntryTabEnabled } from '../api/admin';
 import type { ModuleEntryTabConfig } from '../types/api';
+import PageHeader from '../components/admin/PageHeader.vue';
+import TableToolbar from '../components/admin/TableToolbar.vue';
 
 const loading = ref(false);
 const rows = ref<ModuleEntryTabConfig[]>([]);
@@ -62,7 +68,8 @@ async function onToggle(key: string, enabled: boolean) {
   try {
     const data = await setModuleEntryTabEnabled(key, enabled);
     rows.value = data.tabs || [];
-    message.success('已保存');
+    const target = rows.value.find((item) => item.key === key);
+    message.success(`小程序入口“${target?.label || key}”已${enabled ? '显示' : '隐藏'}`);
   } catch (e) {
     rows.value = prev;
     message.error(errorMessage(e));
