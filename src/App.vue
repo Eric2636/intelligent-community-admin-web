@@ -41,6 +41,10 @@
               <ApiOutlined />
               <span>接口日志设置</span>
             </a-menu-item>
+            <a-menu-item v-if="isSuperAdmin" key="/database">
+              <DatabaseOutlined />
+              <span>数据库管理</span>
+            </a-menu-item>
             <a-sub-menu v-if="isSuperAdmin" key="log-center">
               <template #title>
                 <FileSearchOutlined />
@@ -131,6 +135,7 @@ import {
   ApiOutlined,
   AppstoreOutlined,
   CommentOutlined,
+  DatabaseOutlined,
   DownOutlined,
   FileSearchOutlined,
   LockOutlined,
