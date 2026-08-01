@@ -186,6 +186,8 @@ const actionLabels: Record<string, string> = {
   CONTENT_PIN_UPDATE: '修改内容置顶状态',
   CONTENT_VISIBILITY_UPDATE: '修改内容上下架状态',
   CONTENT_BATCH_STATE_UPDATE: '批量修改内容状态',
+  DATABASE_BACKUP_SETTING_UPDATE: '修改数据库备份设置',
+  DATABASE_BACKUP_MANUAL_CREATE: '创建手动数据库备份',
   ADMIN_DATA_MUTATION: '修改后台数据',
 };
 const actionOptions = Object.entries(actionLabels).map(([value, label]) => ({ value, label }));
@@ -208,6 +210,7 @@ const moduleLabels: Record<string, string> = {
   tasks: '业主互助',
   notices: '系统通知',
   api: '接口日志设置',
+  database: '数据库管理',
 };
 
 function detailRecord(row: AdminSystemLog): Record<string, unknown> {

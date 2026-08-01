@@ -11,6 +11,7 @@ import SystemNoticePublishView from '../views/SystemNoticePublishView.vue';
 import ApiEndpointsView from '../views/ApiEndpointsView.vue';
 import ApiAccessLogsView from '../views/ApiAccessLogsView.vue';
 import FeedbacksView from '../views/FeedbacksView.vue';
+import DatabaseManagementView from '../views/DatabaseManagementView.vue';
 
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -19,6 +20,7 @@ export const router = createRouter({
     { path: '/', redirect: '/users' },
     { path: '/users', component: UsersView, meta: { title: '用户管理' } },
     { path: '/feedbacks', component: FeedbacksView, meta: { title: '意见反馈' } },
+    { path: '/database', component: DatabaseManagementView, meta: { superAdminOnly: true, title: '数据库管理' } },
     { path: '/admins', component: AdminsView, meta: { superAdminOnly: true, title: '管理员管理' } },
     { path: '/mini-modules', component: MiniModuleEntryView, meta: { superAdminOnly: true, title: '小程序入口管理' } },
     { path: '/mini-api-error-logs', component: MiniApiErrorLogsView, meta: { superAdminOnly: true, title: '小程序异常上报' } },
