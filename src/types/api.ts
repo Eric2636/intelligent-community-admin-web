@@ -8,6 +8,76 @@ export type ModuleEntryTabConfig = {
 export type AdminRole = 'ADMIN' | 'SUPERADMIN';
 export type AdminType = 'OFFICIAL' | 'THIRD_PARTY';
 export type ContentVisibility = 'ONLINE' | 'OFFLINE';
+export type BackupFrequency = 'HOURLY' | 'EVERY_6_HOURS' | 'DAILY';
+export type BackupJobStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
+
+export type DatabaseBackupSetting = {
+  id: string;
+  enabled: boolean;
+  frequency: BackupFrequency;
+  minute: number;
+  dailyHour: number;
+  lastScheduledAt?: string | null;
+  updatedAt: string;
+};
+
+export type DatabaseBackupJob = {
+  id: string;
+  triggerType: 'AUTO' | 'MANUAL';
+  status: BackupJobStatus;
+  environment: string;
+  outputFileName?: string | null;
+  outputSizeBytes?: string | null;
+  errorMessage?: string | null;
+  requestedByAdminId?: string | null;
+  requestedByAdminUsername?: string | null;
+  scheduledAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  durationMs?: number | null;
+  createdAt: string;
+};
+
+export type DatabaseBackupOverview = {
+  latestSuccess: DatabaseBackupJob | null;
+  latestFailure: DatabaseBackupJob | null;
+  activeJob: DatabaseBackupJob | null;
+};
+
+export type DatabaseTableInfo = {
+  tableName: string;
+  module: string;
+  description: string;
+  rowCount: number;
+  dataBytes: number;
+  indexBytes: number;
+};
+
+export type DatabaseColumnInfo = {
+  columnName: string;
+  columnType: string;
+  nullable: 'YES' | 'NO';
+  defaultValue?: unknown;
+  columnKey?: string;
+  extra?: string;
+  comment?: string;
+};
+
+export type DatabaseIndexInfo = {
+  indexName: string;
+  columnName: string;
+  seqInIndex: number;
+  nonUnique: number;
+  indexType: string;
+};
+
+export type DatabaseTableStructure = {
+  tableName: string;
+  module: string;
+  description: string;
+  columns: DatabaseColumnInfo[];
+  indexes: DatabaseIndexInfo[];
+};
 
 export type MallCategory = {
   id: string;
