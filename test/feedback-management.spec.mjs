@@ -14,9 +14,10 @@ test('feedback management API and response types are defined', () => {
   const api = source('src/api/admin.ts');
   const types = source('src/types/api.ts');
   assert.match(types, /export type AdminFeedback\s*=\s*\{/);
-  for (const field of ['nickname', 'avatar', 'identity', 'identityLabel', 'content', 'createdAt']) {
+  for (const field of ['nickname', 'avatar', 'userTagLabel', 'content', 'createdAt']) {
     assert.match(types, new RegExp(`${field}:\\s*string`));
   }
+  assert.match(types, /userTagType:\s*'owner'\s*\|\s*'outsider'\s*\|\s*'admin'\s*\|\s*''/);
   assert.match(api, /export async function listAdminFeedbacks\s*\(/);
   assert.match(api, /http\.get\(\s*['"]\/api\/admin\/feedbacks['"]/);
 });
@@ -51,7 +52,8 @@ test('feedback page is a read-only card list with the confirmed filters', () => 
   assert.match(view, /@refresh="load\(\)"/);
   assert.match(view, /feedback\.nickname/);
   assert.match(view, /feedback\.content/);
-  assert.match(view, /feedback\.identityLabel/);
+  assert.match(view, /feedback\.userTagLabel/);
+  assert.match(view, /feedback\.userTagType/);
   assert.match(view, /feedback\.createdAt/);
   assert.doesNotMatch(view, /处理状态|处理备注|删除反馈/);
 });
