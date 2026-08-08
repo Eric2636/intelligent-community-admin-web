@@ -77,7 +77,7 @@
         <div><span class="label">状态码</span>{{ detailRow?.statusCode || '网络失败' }}</div>
         <div><span class="label">方法</span>{{ detailRow?.method || '-' }}</div>
         <div><span class="label">IP</span>{{ detailRow?.ip || '-' }}</div>
-        <div><span class="label">用户ID</span>{{ detailRow?.userId || '-' }}</div>
+        <div><span class="label">用户</span>{{ detailRow?.userName || '匿名用户' }}</div>
         <div><span class="label">网络</span>{{ detailRow?.networkType || '-' }}</div>
         <div class="detail-head__wide request-address">
           <span class="label">请求地址</span>
@@ -139,7 +139,7 @@ const columns = [
   { title: '状态', key: 'statusCode', width: 110 },
   { title: '请求地址', key: 'requestUrl', width: 340, ellipsis: true },
   { title: '错误信息', key: 'errorMessage', width: 280, ellipsis: true },
-  { title: '用户ID', dataIndex: 'userId', key: 'userId', width: 180, ellipsis: true },
+  { title: '用户', dataIndex: 'userName', key: 'userName', width: 160, ellipsis: true },
   { title: 'IP', dataIndex: 'ip', key: 'ip', width: 140 },
   { title: '详情', key: 'detail', width: 90, align: 'center' as const },
 ];
@@ -181,8 +181,7 @@ function openDetail(row: MiniApiErrorLog) {
       requestData: row.requestData,
       responseData: row.responseData,
       stack: row.stack,
-      userId: row.userId,
-      openid: row.openid,
+      userName: row.userName,
       ip: row.ip,
       platform: row.platform,
       appVersion: row.appVersion,

@@ -168,6 +168,7 @@ export type ApiLogFilters = {
   startAt?: string;
   endAt?: string;
   actorId?: string;
+  actorKeyword?: string;
   minDurationMs?: number;
   maxDurationMs?: number;
 };
@@ -211,6 +212,7 @@ export type AdminSystemLog = {
 export type MiniApiErrorLog = {
   id: string;
   userId?: string | null;
+  userName?: string;
   openid?: string | null;
   ip?: string | null;
   method: string;

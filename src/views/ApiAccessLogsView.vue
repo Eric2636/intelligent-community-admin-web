@@ -75,8 +75,8 @@
           <div class="filter-field">
             <label class="filter-field__label" label="用户/管理员">用户/管理员</label>
             <a-input
-              v-model:value="filters.actorId"
-              :placeholder="filters.source === 'ADMIN' ? '请输入管理员 ID' : '请输入用户 ID'"
+              v-model:value="filters.actorKeyword"
+              placeholder="请输入昵称或管理员账号"
               allow-clear
               @pressEnter="submitSearch"
             />
@@ -235,7 +235,7 @@ type FilterModel = {
   source: ApiSource;
   httpStatus?: number;
   statusClass?: ApiStatusClass;
-  actorId?: string;
+  actorKeyword?: string;
   minDurationMs?: number;
   maxDurationMs?: number;
 };
@@ -278,7 +278,7 @@ const hasActiveFilters = computed(() => Boolean(
   || filters.endpointId
   || filters.method
   || statusFilter.value
-  || filters.actorId
+  || filters.actorKeyword
   || durationPreset.value
   || timeRange.value.length,
 ));
@@ -307,7 +307,7 @@ function requestFilters(): Omit<ApiLogFilters, 'page' | 'pageSize'> {
     statusClass: filters.statusClass,
     startAt: timeRange.value?.[0],
     endAt: timeRange.value?.[1],
-    actorId: filters.actorId?.trim() || undefined,
+    actorKeyword: filters.actorKeyword?.trim() || undefined,
     minDurationMs: filters.minDurationMs,
     maxDurationMs: filters.maxDurationMs,
   };
@@ -365,7 +365,7 @@ function resetSearch() {
     source: filters.source,
     httpStatus: undefined,
     statusClass: undefined,
-    actorId: undefined,
+    actorKeyword: undefined,
     minDurationMs: undefined,
     maxDurationMs: undefined,
   });
