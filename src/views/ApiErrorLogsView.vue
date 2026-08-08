@@ -23,7 +23,7 @@
         <a-select-option v-for="item in statusClasses" :key="item" :value="item">{{ item }}</a-select-option>
       </a-select>
       <a-range-picker v-model:value="timeRange" show-time value-format="YYYY-MM-DDTHH:mm:ssZ" :placeholder="['调用时间起', '调用时间止']" />
-      <a-input v-model:value="filters.actorId" placeholder="用户/管理员 ID" allow-clear @pressEnter="submitSearch" />
+      <a-input v-model:value="filters.actorKeyword" placeholder="请输入昵称或管理员账号" allow-clear @pressEnter="submitSearch" />
       <a-input-number v-model:value="filters.minDurationMs" placeholder="最小耗时(ms)" :min="0" @pressEnter="submitSearch" />
       <a-input-number v-model:value="filters.maxDurationMs" placeholder="最大耗时(ms)" :min="0" @pressEnter="submitSearch" />
       <div class="filter-actions">
@@ -92,7 +92,7 @@ type FilterModel = {
   source?: ApiSource;
   httpStatus?: number;
   statusClass?: ApiStatusClass;
-  actorId?: string;
+  actorKeyword?: string;
   minDurationMs?: number;
   maxDurationMs?: number;
 };
@@ -133,7 +133,7 @@ function requestFilters(): Omit<ApiLogFilters, 'page' | 'pageSize'> {
     statusClass: filters.statusClass,
     startAt: timeRange.value?.[0],
     endAt: timeRange.value?.[1],
-    actorId: filters.actorId?.trim() || undefined,
+    actorKeyword: filters.actorKeyword?.trim() || undefined,
     minDurationMs: filters.minDurationMs,
     maxDurationMs: filters.maxDurationMs,
   };
@@ -178,7 +178,7 @@ function resetSearch() {
     source: undefined,
     httpStatus: undefined,
     statusClass: undefined,
-    actorId: undefined,
+    actorKeyword: undefined,
     minDurationMs: undefined,
     maxDurationMs: undefined,
   });

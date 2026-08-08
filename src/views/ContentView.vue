@@ -28,7 +28,7 @@
       </label>
       <label v-if="type === 'posts'" class="filter-field filter-field--wide">
         <span class="filter-field__label">发布用户</span>
-        <a-input v-model:value="authorKeyword" allow-clear placeholder="昵称或用户 ID" @pressEnter="submitSearch" />
+        <a-input v-model:value="authorKeyword" allow-clear placeholder="发布者昵称" @pressEnter="submitSearch" />
       </label>
       <template #actions>
         <a-button type="primary" @click="submitSearch">查询</a-button>
@@ -271,18 +271,6 @@
     >
       <a-spin :spinning="editDetailLoading">
       <a-form layout="vertical" class="edit-form">
-        <a-form-item
-          v-if="editMode === 'edit'"
-          label="发布者用户 ID（小程序 user id；超级管理员可指定，普通管理员固定为本人绑定用户）"
-        >
-          <a-input
-            v-model:value="editForm.actorUserId"
-            placeholder="选填"
-            allow-clear
-            :disabled="!isSuperAdmin"
-          />
-        </a-form-item>
-
         <template v-if="type === 'posts'">
           <div class="edit-post-layout">
             <section class="edit-section">
@@ -578,7 +566,6 @@ const editSaving = ref(false);
 const editDetailLoading = ref(false);
 const editingId = ref<string | null>(null);
 const editForm = reactive({
-  actorUserId: '',
   title: '',
   content: '',
   desc: '',
@@ -929,7 +916,6 @@ async function uploadToMediaField(options: any, field: MediaTextField, mediaType
 }
 
 function resetEditForm() {
-  editForm.actorUserId = '';
   editForm.title = '';
   editForm.content = '';
   editForm.desc = '';
@@ -961,9 +947,6 @@ function resetEditForm() {
 function openCreate() {
   resetEditForm();
   editMode.value = 'create';
-  if (!isSuperAdmin.value && boundUserId.value) {
-    editForm.actorUserId = boundUserId.value;
-  }
   editOpen.value = true;
 }
 
@@ -982,7 +965,6 @@ async function openEdit(record: ContentItem) {
   editDetailLoading.value = true;
   try {
     const d = await getContentDetail(type.value, record.id);
-    editForm.actorUserId = String(d.authorId || d.publisherId || '');
     editForm.title = String(d.title || '');
     editForm.content = String(d.content || '');
     editForm.desc = String(d.desc || '');
@@ -1034,7 +1016,6 @@ function buildPayload(): Record<string, unknown> {
     visibility: editForm.visibility,
     pinned: editForm.pinned,
   };
-  if (editForm.actorUserId.trim()) base.actorUserId = editForm.actorUserId.trim();
 
   if (type.value === 'posts') {
     Object.assign(base, {

@@ -45,7 +45,7 @@
           {{ record.orgName || '-' }}
         </template>
         <template v-if="column.key === 'boundUserId'">
-          <span class="mono">{{ record.boundUserId ? (boundUserNameMap[String(record.boundUserId)] || record.boundUserId) : '-' }}</span>
+          <span>{{ record.boundUserId ? (boundUserNameMap[String(record.boundUserId)] || '用户已删除') : '-' }}</span>
         </template>
         <template v-if="column.key === 'enabled'">
           <a-tag :color="record.enabled ? 'green' : 'red'">{{ record.enabled ? '正常' : '已停用' }}</a-tag>
@@ -148,12 +148,12 @@
             :filter-option="false"
             :not-found-content="bindUserLoading ? '加载中…' : '无匹配用户'"
             :loading="bindUserLoading"
-            placeholder="输入昵称或 OpenID 搜索"
+            placeholder="输入昵称搜索"
             @search="captureBindUserKeyword"
             @inputKeyDown="submitBindUserSearch"
           >
             <a-select-option v-for="u in bindUserOptions" :key="u.id" :value="u.id" :disabled="takenBoundUserIds.has(u.id)">
-              {{ (u.name || '未命名') + '（' + u.id + '）' }}
+              {{ u.name || '未命名用户' }}
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -268,7 +268,7 @@ async function load(deduplicate = false) {
       const names: Record<string, string> = {};
       if (ids.length) {
         const mini = await listUsersMiniByIds(ids);
-        for (const user of mini) names[user.id] = user.name || user.openid || user.id;
+            for (const user of mini) names[user.id] = user.name || '未命名用户';
       }
       return { data, names };
     },
