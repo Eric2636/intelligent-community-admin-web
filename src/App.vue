@@ -110,6 +110,8 @@
       <a-modal
         v-model:open="changePwdOpen"
         title="修改密码"
+        ok-text="确认"
+        cancel-text="取消"
         :confirm-loading="changePwdSaving"
         @ok="submitChangePassword"
         destroy-on-close

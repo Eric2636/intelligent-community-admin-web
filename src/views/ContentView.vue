@@ -7,7 +7,7 @@
     >
       <template #actions>
         <a-button v-if="canCreateContent" type="primary" @click="openCreate">新建{{ title }}</a-button>
-        <a-button v-if="canCreateContent && type === 'posts'" @click="openCreateAnnouncement">
+        <a-button v-if="canPublishAnnouncement && type === 'posts'" @click="openCreateAnnouncement">
           发布公告
         </a-button>
       </template>
@@ -25,6 +25,10 @@
           <a-select-option value="ONLINE">已上架</a-select-option>
           <a-select-option value="OFFLINE">已下架</a-select-option>
         </a-select>
+      </label>
+      <label v-if="type === 'posts'" class="filter-field filter-field--wide">
+        <span class="filter-field__label">发布用户</span>
+        <a-input v-model:value="authorKeyword" allow-clear placeholder="昵称或用户 ID" @pressEnter="submitSearch" />
       </label>
       <template #actions>
         <a-button type="primary" @click="submitSearch">查询</a-button>
@@ -258,6 +262,8 @@
     <a-modal
       v-model:open="editOpen"
       :title="editForm.postType === 'ANNOUNCEMENT' ? (editMode === 'create' ? '发布公告' : '编辑公告') : (editMode === 'create' ? `新建${title}` : `编辑${title}`)"
+      ok-text="确认"
+      cancel-text="取消"
       :width="type === 'posts' ? '760px' : '640px'"
       :confirm-loading="editSaving"
       destroy-on-close
@@ -555,6 +561,7 @@ const loading = ref(false);
 const loadError = ref('');
 const keyword = ref('');
 const visibility = ref<'' | ContentVisibility>('');
+const authorKeyword = ref('');
 const rows = ref<ContentItem[]>([]);
 const pagination = reactive<TablePaginationConfig>({ current: 1, pageSize: 20, total: 0 });
 const listRequest = createLatestRequestRunner();
@@ -633,7 +640,8 @@ async function refreshAdmin() {
 
 const isSuperAdmin = computed(() => adminRef.value?.role === 'SUPERADMIN');
 const boundUserId = computed(() => (adminRef.value?.boundUserId || '').trim());
-const canCreateContent = computed(() => isSuperAdmin.value || Boolean(boundUserId.value));
+const canCreateContent = computed(() => Boolean(boundUserId.value));
+const canPublishAnnouncement = computed(() => Boolean(adminRef.value?.id) && adminRef.value?.enabled !== false);
 
 function contentOwnerId(record: ContentItem): string {
   return String(record.publisherId || record.authorId || '');
@@ -686,6 +694,7 @@ async function load(deduplicate = false) {
     pageSize: pagination.pageSize,
     keyword: keyword.value || undefined,
     visibility: visibility.value || undefined,
+    authorKeyword: type.value === 'posts' ? authorKeyword.value || undefined : undefined,
   };
   await listRequest.run({
     key: JSON.stringify({ type: requestType, ...params }),
@@ -726,6 +735,7 @@ function submitSearch() {
 function resetSearch() {
   keyword.value = '';
   visibility.value = '';
+  authorKeyword.value = '';
   pagination.current = 1;
   load(true);
 }
@@ -746,7 +756,7 @@ function toggleVisibility(id: string, online: boolean) {
   Modal.confirm({
     title: online ? '确认上架？' : '确认下架？',
     content: online ? shelfHelpOnline : shelfHelpOffline,
-    okText: '确定',
+    okText: '确认',
     cancelText: '取消',
     async onOk() {
       await updateContentState(type.value, id, { visibility: online ? 'ONLINE' : 'OFFLINE' });
@@ -774,7 +784,7 @@ function togglePinnedById(rawId: string) {
   Modal.confirm({
     title: nextPinned ? '确认置顶？' : '确认取消置顶？',
     content: nextPinned ? pinHelpOn : pinHelpOff,
-    okText: '确定',
+    okText: '确认',
     cancelText: '取消',
     async onOk() {
       try {
@@ -1157,6 +1167,7 @@ function confirmDelete(record: ContentItem) {
     title: `确认删除“${contentName}”？`,
     content: '删除后无法恢复，该操作会记录到操作审计；若商品存在订单将无法删除。',
     okText: '删除',
+    cancelText: '取消',
     okType: 'danger',
     async onOk() {
       await deleteContent(type.value, record.id);

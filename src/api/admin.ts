@@ -185,7 +185,7 @@ export async function superAdminResetAdminPasswordRandom(adminId: string) {
 
 export async function listContents(
   type: ContentType,
-  params: { page?: number; pageSize?: number; keyword?: string; visibility?: ContentVisibility },
+  params: { page?: number; pageSize?: number; keyword?: string; visibility?: ContentVisibility; authorKeyword?: string },
 ) {
   return unwrap<PageResult<ContentItem>>(await http.get(`/api/admin/contents/${type}`, { params }));
 }

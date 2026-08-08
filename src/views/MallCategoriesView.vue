@@ -29,6 +29,8 @@
     <a-modal
       v-model:open="modalOpen"
       :title="form.id ? '编辑分类' : '新增分类'"
+      ok-text="确认"
+      cancel-text="取消"
       :confirm-loading="saving"
       @ok="submit"
       destroy-on-close
@@ -154,6 +156,7 @@ function confirmDelete(record: MallCategory) {
     title: '确认删除该分类？',
     content: '已被商品使用的分类不能删除，请改为停用。',
     okText: '删除',
+    cancelText: '取消',
     okType: 'danger',
     async onOk() {
       await deleteMallCategory(record.id);
