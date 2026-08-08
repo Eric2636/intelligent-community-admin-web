@@ -33,9 +33,9 @@
         <template v-if="column.key === 'enabled'">
           <a-tag :color="record.enabled ? 'green' : 'red'">{{ record.enabled ? '正常' : '已冻结' }}</a-tag>
         </template>
-        <template v-if="column.key === 'contentTagLabel'">
-          <a-tag v-if="record.contentTagLabel" :color="tagColor(record.contentTagType)">
-            {{ record.contentTagLabel }}
+        <template v-if="column.key === 'userTagLabel'">
+          <a-tag v-if="record.userTagLabel" :color="tagColor(record.userTagType)">
+            {{ record.userTagLabel }}
           </a-tag>
           <span v-else style="color: rgba(0, 0, 0, 0.25)">-</span>
         </template>
@@ -65,6 +65,8 @@
     <a-modal
       v-model:open="reasonOpen"
       title="冻结用户"
+      ok-text="确认"
+      cancel-text="取消"
       :confirm-loading="reasonSaving"
       @ok="submitFreeze"
       destroy-on-close
@@ -117,7 +119,7 @@ const reasonForm = reactive<{ reason: string }>({ reason: '' });
 
 const columns = [
   { title: '昵称', dataIndex: 'name', key: 'name', ellipsis: true, width: 210 },
-  { title: '用户标签', dataIndex: 'contentTagLabel', key: 'contentTagLabel', width: 120 },
+  { title: '用户标签', dataIndex: 'userTagLabel', key: 'userTagLabel', width: 120 },
   { title: '状态', key: 'enabled', width: 100 },
   { title: '冻结原因', dataIndex: 'disabledReason', key: 'disabledReason', width: 230 },
   { title: '注册时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
@@ -162,7 +164,7 @@ function onTableChange(page: TablePaginationConfig) {
   load();
 }
 
-function tagColor(type?: MiniUser['contentTagType']) {
+function tagColor(type?: MiniUser['userTagType']) {
   if (type === 'admin') return 'blue';
   if (type === 'owner') return 'green';
   if (type === 'outsider') return 'default';
@@ -174,6 +176,8 @@ function toggleUser(id: string, enabled: boolean) {
     Modal.confirm({
       title: '确认启用用户？',
       content: '启用后用户可以恢复写操作。',
+      okText: '确认',
+      cancelText: '取消',
       async onOk() {
         await updateUserEnabled(id, { enabled: true });
         message.success(`用户“${rows.value.find((item) => item.id === id)?.name || id}”已恢复正常`);

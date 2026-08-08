@@ -107,8 +107,8 @@ export type MiniUser = {
   openid: string;
   name?: string;
   avatar?: string;
-  contentTagLabel?: string;
-  contentTagType?: 'owner' | 'outsider' | 'admin' | '';
+  userTagLabel?: string;
+  userTagType?: 'owner' | 'outsider' | 'admin' | '';
   gender: number;
   enabled: boolean;
   disabledAt?: string;
@@ -132,8 +132,8 @@ export type AdminFeedback = {
   userId: string;
   nickname: string;
   avatar: string;
-  identity: string;
-  identityLabel: string;
+  userTagLabel: string;
+  userTagType: 'owner' | 'outsider' | 'admin' | '';
   content: string;
   createdAt: string;
 };
@@ -168,6 +168,7 @@ export type ApiLogFilters = {
   startAt?: string;
   endAt?: string;
   actorId?: string;
+  actorKeyword?: string;
   minDurationMs?: number;
   maxDurationMs?: number;
 };
@@ -211,6 +212,7 @@ export type AdminSystemLog = {
 export type MiniApiErrorLog = {
   id: string;
   userId?: string | null;
+  userName?: string;
   openid?: string | null;
   ip?: string | null;
   method: string;

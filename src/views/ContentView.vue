@@ -7,7 +7,7 @@
     >
       <template #actions>
         <a-button v-if="canCreateContent" type="primary" @click="openCreate">新建{{ title }}</a-button>
-        <a-button v-if="canCreateContent && type === 'posts'" @click="openCreateAnnouncement">
+        <a-button v-if="canPublishAnnouncement && type === 'posts'" @click="openCreateAnnouncement">
           发布公告
         </a-button>
       </template>
@@ -25,6 +25,10 @@
           <a-select-option value="ONLINE">已上架</a-select-option>
           <a-select-option value="OFFLINE">已下架</a-select-option>
         </a-select>
+      </label>
+      <label v-if="type === 'posts'" class="filter-field filter-field--wide">
+        <span class="filter-field__label">发布用户</span>
+        <a-input v-model:value="authorKeyword" allow-clear placeholder="发布者昵称" @pressEnter="submitSearch" />
       </label>
       <template #actions>
         <a-button type="primary" @click="submitSearch">查询</a-button>
@@ -258,6 +262,8 @@
     <a-modal
       v-model:open="editOpen"
       :title="editForm.postType === 'ANNOUNCEMENT' ? (editMode === 'create' ? '发布公告' : '编辑公告') : (editMode === 'create' ? `新建${title}` : `编辑${title}`)"
+      ok-text="确认"
+      cancel-text="取消"
       :width="type === 'posts' ? '760px' : '640px'"
       :confirm-loading="editSaving"
       destroy-on-close
@@ -265,18 +271,6 @@
     >
       <a-spin :spinning="editDetailLoading">
       <a-form layout="vertical" class="edit-form">
-        <a-form-item
-          v-if="editMode === 'edit'"
-          label="发布者用户 ID（小程序 user id；超级管理员可指定，普通管理员固定为本人绑定用户）"
-        >
-          <a-input
-            v-model:value="editForm.actorUserId"
-            placeholder="选填"
-            allow-clear
-            :disabled="!isSuperAdmin"
-          />
-        </a-form-item>
-
         <template v-if="type === 'posts'">
           <div class="edit-post-layout">
             <section class="edit-section">
@@ -555,6 +549,7 @@ const loading = ref(false);
 const loadError = ref('');
 const keyword = ref('');
 const visibility = ref<'' | ContentVisibility>('');
+const authorKeyword = ref('');
 const rows = ref<ContentItem[]>([]);
 const pagination = reactive<TablePaginationConfig>({ current: 1, pageSize: 20, total: 0 });
 const listRequest = createLatestRequestRunner();
@@ -571,7 +566,6 @@ const editSaving = ref(false);
 const editDetailLoading = ref(false);
 const editingId = ref<string | null>(null);
 const editForm = reactive({
-  actorUserId: '',
   title: '',
   content: '',
   desc: '',
@@ -633,7 +627,8 @@ async function refreshAdmin() {
 
 const isSuperAdmin = computed(() => adminRef.value?.role === 'SUPERADMIN');
 const boundUserId = computed(() => (adminRef.value?.boundUserId || '').trim());
-const canCreateContent = computed(() => isSuperAdmin.value || Boolean(boundUserId.value));
+const canCreateContent = computed(() => Boolean(boundUserId.value));
+const canPublishAnnouncement = computed(() => Boolean(adminRef.value?.id) && adminRef.value?.enabled !== false);
 
 function contentOwnerId(record: ContentItem): string {
   return String(record.publisherId || record.authorId || '');
@@ -686,6 +681,7 @@ async function load(deduplicate = false) {
     pageSize: pagination.pageSize,
     keyword: keyword.value || undefined,
     visibility: visibility.value || undefined,
+    authorKeyword: type.value === 'posts' ? authorKeyword.value || undefined : undefined,
   };
   await listRequest.run({
     key: JSON.stringify({ type: requestType, ...params }),
@@ -726,6 +722,7 @@ function submitSearch() {
 function resetSearch() {
   keyword.value = '';
   visibility.value = '';
+  authorKeyword.value = '';
   pagination.current = 1;
   load(true);
 }
@@ -746,7 +743,7 @@ function toggleVisibility(id: string, online: boolean) {
   Modal.confirm({
     title: online ? '确认上架？' : '确认下架？',
     content: online ? shelfHelpOnline : shelfHelpOffline,
-    okText: '确定',
+    okText: '确认',
     cancelText: '取消',
     async onOk() {
       await updateContentState(type.value, id, { visibility: online ? 'ONLINE' : 'OFFLINE' });
@@ -774,7 +771,7 @@ function togglePinnedById(rawId: string) {
   Modal.confirm({
     title: nextPinned ? '确认置顶？' : '确认取消置顶？',
     content: nextPinned ? pinHelpOn : pinHelpOff,
-    okText: '确定',
+    okText: '确认',
     cancelText: '取消',
     async onOk() {
       try {
@@ -919,7 +916,6 @@ async function uploadToMediaField(options: any, field: MediaTextField, mediaType
 }
 
 function resetEditForm() {
-  editForm.actorUserId = '';
   editForm.title = '';
   editForm.content = '';
   editForm.desc = '';
@@ -951,9 +947,6 @@ function resetEditForm() {
 function openCreate() {
   resetEditForm();
   editMode.value = 'create';
-  if (!isSuperAdmin.value && boundUserId.value) {
-    editForm.actorUserId = boundUserId.value;
-  }
   editOpen.value = true;
 }
 
@@ -972,7 +965,6 @@ async function openEdit(record: ContentItem) {
   editDetailLoading.value = true;
   try {
     const d = await getContentDetail(type.value, record.id);
-    editForm.actorUserId = String(d.authorId || d.publisherId || '');
     editForm.title = String(d.title || '');
     editForm.content = String(d.content || '');
     editForm.desc = String(d.desc || '');
@@ -1024,7 +1016,6 @@ function buildPayload(): Record<string, unknown> {
     visibility: editForm.visibility,
     pinned: editForm.pinned,
   };
-  if (editForm.actorUserId.trim()) base.actorUserId = editForm.actorUserId.trim();
 
   if (type.value === 'posts') {
     Object.assign(base, {
@@ -1157,6 +1148,7 @@ function confirmDelete(record: ContentItem) {
     title: `确认删除“${contentName}”？`,
     content: '删除后无法恢复，该操作会记录到操作审计；若商品存在订单将无法删除。',
     okText: '删除',
+    cancelText: '取消',
     okType: 'danger',
     async onOk() {
       await deleteContent(type.value, record.id);

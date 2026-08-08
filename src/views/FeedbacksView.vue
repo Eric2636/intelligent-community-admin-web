@@ -65,8 +65,8 @@
                 </a-avatar>
                 <div class="feedback-card__user">
                   <div class="feedback-card__name">{{ feedback.nickname }}</div>
-                  <a-tag :color="identityColor(feedback.identity)">
-                    {{ feedback.identityLabel || '未设置身份' }}
+                  <a-tag :color="identityColor(feedback.userTagType)">
+                    {{ feedback.userTagLabel || '未设置身份' }}
                   </a-tag>
                 </div>
                 <time class="feedback-card__time">{{ formatDateTimeYmdHm(feedback.createdAt) }}</time>
@@ -185,8 +185,9 @@ function changePageSize(_page: number, pageSize: number) {
   load();
 }
 
-function identityColor(identity: string) {
-  if (identity === 'OWNER') return 'green';
+function identityColor(type: AdminFeedback['userTagType']) {
+  if (type === 'admin') return 'blue';
+  if (type === 'owner') return 'green';
   return 'default';
 }
 

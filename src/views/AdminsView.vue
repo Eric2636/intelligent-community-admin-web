@@ -45,7 +45,7 @@
           {{ record.orgName || '-' }}
         </template>
         <template v-if="column.key === 'boundUserId'">
-          <span class="mono">{{ record.boundUserId ? (boundUserNameMap[String(record.boundUserId)] || record.boundUserId) : '-' }}</span>
+          <span>{{ record.boundUserId ? (boundUserNameMap[String(record.boundUserId)] || '用户已删除') : '-' }}</span>
         </template>
         <template v-if="column.key === 'enabled'">
           <a-tag :color="record.enabled ? 'green' : 'red'">{{ record.enabled ? '正常' : '已停用' }}</a-tag>
@@ -101,7 +101,7 @@
       </template>
     </a-table>
 
-    <a-modal v-model:open="createOpen" title="新建普通管理员" @ok="submitCreate" :confirm-loading="creating">
+    <a-modal v-model:open="createOpen" title="新建普通管理员" ok-text="确认" cancel-text="取消" @ok="submitCreate" :confirm-loading="creating">
       <a-form layout="vertical" :model="form">
         <a-form-item label="账号" required>
           <a-input v-model:value="form.username" />
@@ -121,7 +121,7 @@
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="editOpen" title="编辑管理员" @ok="submitEdit" :confirm-loading="editSaving" destroy-on-close>
+    <a-modal v-model:open="editOpen" title="编辑管理员" ok-text="确认" cancel-text="取消" @ok="submitEdit" :confirm-loading="editSaving" destroy-on-close>
       <a-form layout="vertical" :model="editForm">
         <a-form-item label="账号">
           <a-input :value="editUsername" disabled />
@@ -138,7 +138,7 @@
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="bindOpen" title="绑定小程序用户" @ok="submitBind" :confirm-loading="bindSaving" destroy-on-close>
+    <a-modal v-model:open="bindOpen" title="绑定小程序用户" ok-text="确认" cancel-text="取消" @ok="submitBind" :confirm-loading="bindSaving" destroy-on-close>
       <a-form layout="vertical">
         <a-form-item label="选择小程序用户">
           <a-select
@@ -148,12 +148,12 @@
             :filter-option="false"
             :not-found-content="bindUserLoading ? '加载中…' : '无匹配用户'"
             :loading="bindUserLoading"
-            placeholder="输入昵称或 OpenID 搜索"
+            placeholder="输入昵称搜索"
             @search="captureBindUserKeyword"
             @inputKeyDown="submitBindUserSearch"
           >
             <a-select-option v-for="u in bindUserOptions" :key="u.id" :value="u.id" :disabled="takenBoundUserIds.has(u.id)">
-              {{ (u.name || '未命名') + '（' + u.id + '）' }}
+              {{ u.name || '未命名用户' }}
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -268,7 +268,7 @@ async function load(deduplicate = false) {
       const names: Record<string, string> = {};
       if (ids.length) {
         const mini = await listUsersMiniByIds(ids);
-        for (const user of mini) names[user.id] = user.name || user.openid || user.id;
+            for (const user of mini) names[user.id] = user.name || '未命名用户';
       }
       return { data, names };
     },
@@ -323,6 +323,8 @@ function handleBindClick(record: AdminUser) {
     Modal.confirm({
       title: '确认取消绑定？',
       content: `将解除管理员「${record.username}」与小程序用户的绑定关系。`,
+      okText: '确认',
+      cancelText: '取消',
       async onOk() {
         await updateAdmin(record.id, { boundUserId: '' });
         message.success('已解除绑定');
@@ -460,6 +462,7 @@ function confirmSuperResetPassword(record: AdminUser) {
     title: '确认重置该管理员的密码？',
     content: '将生成随机密码，成功后在弹窗中仅展示一次，请复制并告知对方。',
     okText: '重置',
+    cancelText: '取消',
     async onOk() {
       try {
         const data = await superAdminResetAdminPasswordRandom(record.id);
@@ -494,6 +497,7 @@ function confirmDelete(record: AdminUser) {
     title: '确认删除该管理员？',
     content: `将永久删除账号「${record.username}」，不可恢复。`,
     okText: '删除',
+    cancelText: '取消',
     okType: 'danger',
     async onOk() {
       await deleteAdmin(record.id);
@@ -511,6 +515,7 @@ function toggleAdmin(record: AdminUser) {
       ? `启用后，管理员“${record.username}”可以恢复登录和后台操作。`
       : `停用后，管理员“${record.username}”将无法继续登录后台。`,
     okText: enabled ? '启用' : '停用',
+    cancelText: '取消',
     okType: enabled ? 'primary' : 'danger',
     async onOk() {
       await updateAdmin(record.id, { enabled });
