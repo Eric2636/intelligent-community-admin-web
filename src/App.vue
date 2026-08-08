@@ -110,6 +110,8 @@
       <a-modal
         v-model:open="changePwdOpen"
         title="修改密码"
+        ok-text="确认"
+        cancel-text="取消"
         :confirm-loading="changePwdSaving"
         @ok="submitChangePassword"
         destroy-on-close
@@ -253,8 +255,9 @@ async function submitChangePassword() {
   changePwdSaving.value = true;
   try {
     await changeMyPassword(p1);
-    message.success('密码已修改');
+    message.success('密码已修改，请重新登录');
     changePwdOpen.value = false;
+    logout();
   } catch (e) {
     message.error(e instanceof Error ? e.message : '修改失败');
     return Promise.reject(e);

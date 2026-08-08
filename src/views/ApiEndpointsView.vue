@@ -67,6 +67,8 @@
     <a-modal
       v-model:open="descriptionOpen"
       title="编辑接口描述"
+      ok-text="确认"
+      cancel-text="取消"
       :confirm-loading="descriptionSaving"
       destroy-on-close
       @ok="saveDescription"

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { message } from 'ant-design-vue';
 import { appBaseWithoutTrailingSlash, appPath } from '../config/app-base';
 import type {
   ApiRequestLog,
@@ -31,6 +32,7 @@ const http = axios.create({ baseURL: appBaseWithoutTrailingSlash });
 const rawHttp = axios.create({ baseURL: appBaseWithoutTrailingSlash });
 
 let refreshPromise: Promise<string> | null = null;
+let sessionReplacedHandled = false;
 
 function clearAdminSession() {
   localStorage.removeItem('admin_token');
@@ -47,6 +49,16 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (response) => response,
   async (error) => {
+    const reason = error?.response?.data?.reason;
+    if (error?.response?.status === 401 && reason === 'session_replaced') {
+      clearAdminSession();
+      if (!sessionReplacedHandled) {
+        sessionReplacedHandled = true;
+        message.error('账号已在其他设备登录，请重新登录');
+      }
+      if (location.pathname !== appPath('/login')) location.href = appPath('/login');
+      return Promise.reject(error);
+    }
     if (error?.response?.status === 401) {
       const originalRequest = error.config;
       const refreshToken = localStorage.getItem('admin_refresh_token');
@@ -90,7 +102,7 @@ function unwrap<T>(res: { data: { code?: number; data?: T } | T }): T {
 }
 
 export async function login(data: { username: string; password: string }) {
-  return unwrap<{
+  const result = unwrap<{
     token: string;
     accessToken?: string;
     refreshToken: string;
@@ -98,6 +110,8 @@ export async function login(data: { username: string; password: string }) {
     refreshExpiresIn?: string;
     admin: AdminUser;
   }>(await http.post('/api/admin/auth/login', data));
+  sessionReplacedHandled = false;
+  return result;
 }
 
 export async function getLoginCaptcha() {
@@ -171,7 +185,7 @@ export async function superAdminResetAdminPasswordRandom(adminId: string) {
 
 export async function listContents(
   type: ContentType,
-  params: { page?: number; pageSize?: number; keyword?: string; visibility?: ContentVisibility },
+  params: { page?: number; pageSize?: number; keyword?: string; visibility?: ContentVisibility; authorKeyword?: string },
 ) {
   return unwrap<PageResult<ContentItem>>(await http.get(`/api/admin/contents/${type}`, { params }));
 }
