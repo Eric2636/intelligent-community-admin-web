@@ -248,6 +248,10 @@ export type ContentItem = {
   locationAddress?: string;
   latitude?: number | null;
   longitude?: number | null;
+  wechatContact?: string | null;
+  phoneContact?: string | null;
+  phoneIsWechat?: boolean;
+  contact?: string | null;
   visibility: ContentVisibility;
   pinned: boolean;
   createdAt: string;
