@@ -180,7 +180,9 @@
             <div class="mp-price" v-if="detail?.price">{{ detail.price }}{{ detail?.unit || '元' }}</div>
             <div class="mp-subtime">{{ detail?.createdAt ? formatDateTimeYmdHm(detail.createdAt) : '' }}</div>
             <div class="mp-content">{{ detail?.desc || '-' }}</div>
-            <div class="mp-sub">联系：{{ detail?.contact || '-' }}</div>
+            <div v-if="detail?.wechatContact" class="mp-sub">微信号：{{ detail.wechatContact }}</div>
+            <div v-if="detail?.phoneContact" class="mp-sub">{{ detail.phoneIsWechat ? '手机号（可添加微信）' : '手机号' }}：{{ detail.phoneContact }}</div>
+            <div v-if="!detail?.wechatContact && !detail?.phoneContact" class="mp-sub">联系方式：{{ detail?.contact || '-' }}</div>
             <div class="mp-kv" v-if="detail?.locationName || detail?.locationAddress || detail?.latitude || detail?.longitude">
               <div class="mp-kv__row"><span class="mp-kv__k">门店</span>{{ detail?.locationName || '-' }}</div>
               <div class="mp-kv__row"><span class="mp-kv__k">地址</span>{{ detail?.locationAddress || '-' }}</div>
@@ -392,9 +394,23 @@
           <a-form-item label="单位">
             <a-input v-model:value="editForm.unit" placeholder="默认 元" />
           </a-form-item>
-            <a-form-item label="联系方式">
-              <a-input v-model:value="editForm.contact" />
-            </a-form-item>
+            <div class="edit-form-grid edit-form-grid--two">
+              <a-form-item label="微信号">
+                <a-input v-model:value="editForm.wechatContact" placeholder="选填" />
+              </a-form-item>
+              <a-form-item label="手机号">
+                <a-input v-model:value="editForm.phoneContact" placeholder="选填，仅支持中国大陆手机号" maxlength="11" />
+              </a-form-item>
+            </div>
+            <a-checkbox v-model:checked="editForm.phoneIsWechat" :disabled="!editForm.phoneContact.trim()">手机号也是微信号</a-checkbox>
+            <a-alert
+              v-if="editForm.legacyContact && !editForm.wechatContact && !editForm.phoneContact"
+              class="legacy-contact-alert"
+              type="warning"
+              show-icon
+              :message="`历史联系方式：${editForm.legacyContact}`"
+              description="请补充微信号或手机号后保存，系统将转换为新的联系方式格式。"
+            />
           <a-form-item label="门店名称">
             <a-input v-model:value="editForm.locationName" placeholder="例如 洪山区人民政府店" />
           </a-form-item>
@@ -574,7 +590,10 @@ const editForm = reactive({
   categoryId: '',
   price: '',
   unit: '元',
-  contact: '',
+  wechatContact: '',
+  phoneContact: '',
+  phoneIsWechat: false,
+  legacyContact: '',
   locationName: '',
   locationAddress: '',
   latitude: '',
@@ -924,7 +943,10 @@ function resetEditForm() {
   editForm.categoryId = defaultMallCategoryId();
   editForm.price = '';
   editForm.unit = '元';
-  editForm.contact = '';
+  editForm.wechatContact = '';
+  editForm.phoneContact = '';
+  editForm.phoneIsWechat = false;
+  editForm.legacyContact = '';
   editForm.locationName = '';
   editForm.locationAddress = '';
   editForm.latitude = '';
@@ -974,7 +996,10 @@ async function openEdit(record: ContentItem) {
     editForm.categoryId = String(d.categoryId || defaultMallCategoryId());
     editForm.price = d.price != null ? String(d.price) : '';
     editForm.unit = String(d.unit || '元');
-    editForm.contact = String(d.contact || '');
+    editForm.wechatContact = String(d.wechatContact || '');
+    editForm.phoneContact = String(d.phoneContact || '');
+    editForm.phoneIsWechat = Boolean(d.phoneIsWechat);
+    editForm.legacyContact = !d.wechatContact && !d.phoneContact ? String(d.contact || '') : '';
     editForm.locationName = String(d.locationName || '');
     editForm.locationAddress = String(d.locationAddress || '');
     editForm.latitude = d.latitude != null ? String(d.latitude) : '';
@@ -1039,7 +1064,9 @@ function buildPayload(): Record<string, unknown> {
       desc: editForm.desc.trim(),
       price: editForm.price.trim() || undefined,
       unit: editForm.unit.trim() || '元',
-      contact: editForm.contact.trim() || undefined,
+      wechatContact: editForm.wechatContact.trim() || null,
+      phoneContact: editForm.phoneContact.trim() || null,
+      phoneIsWechat: Boolean(editForm.phoneIsWechat),
       locationName: editForm.locationName.trim() || undefined,
       locationAddress: editForm.locationAddress.trim() || undefined,
       latitude: optionalNumber(editForm.latitude),
@@ -1095,6 +1122,16 @@ async function submitEdit() {
   if (type.value === 'items') {
     if (!editForm.title.trim()) {
       message.warning('请填写标题');
+      return Promise.reject();
+    }
+    const wechatContact = editForm.wechatContact.trim();
+    const phoneContact = editForm.phoneContact.trim();
+    if (!wechatContact && !phoneContact && !editForm.legacyContact.trim()) {
+      message.warning('请至少填写微信号或手机号');
+      return Promise.reject();
+    }
+    if (phoneContact && !/^1[3-9]\d{9}$/.test(phoneContact)) {
+      message.warning('请输入正确的手机号');
       return Promise.reject();
     }
     const lat = editForm.latitude.trim();
