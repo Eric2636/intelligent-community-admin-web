@@ -131,6 +131,11 @@
             <a-tag v-if="detail?.validUntil">有效至 {{ formatDateTimeYmdHm(detail.validUntil) }}</a-tag>
           </div>
             <div class="mp-content" v-if="detail?.content">{{ detail.content }}</div>
+            <div v-if="normArray(detail?.attachments).length" class="mp-attachments">
+              <a-list size="small" :data-source="normArray(detail?.attachments)">
+                <template #renderItem="{ item }"><a-list-item><a :href="item.url" target="_blank" rel="noreferrer">{{ item.name || '附件' }}</a><span>{{ formatAttachmentSize(item.sizeBytes) }}</span></a-list-item></template>
+              </a-list>
+            </div>
             <div class="mp-media" v-if="normArray(detail?.images).length || normArray(detail?.videos).length">
               <div class="mp-media-grid">
                 <a-image v-for="(u, idx) in normArray(detail?.images)" :key="`img-${idx}`" :src="String(u)" />
@@ -351,8 +356,19 @@
                       上传视频
                     </a-button>
                   </a-upload>
-                </a-form-item>
+                  </a-form-item>
+                </div>
+            </section>
+
+            <section class="edit-section">
+              <div class="edit-section__head"><div><div class="edit-section__title">附件</div><div class="edit-section__sub">最多5个，单个不超过20MB，支持秒传</div></div></div>
+              <div v-for="(attachment, idx) in editForm.attachments" :key="attachment.mediaAssetId" class="forum-attachment-row">
+                <span class="forum-attachment-row__name">{{ attachment.name }}</span><span>{{ formatAttachmentSize(attachment.sizeBytes) }}</span>
+                <a-button size="small" danger @click="removeForumAttachment(idx)">移除</a-button>
               </div>
+              <a-upload v-if="editForm.attachments.length < 5" :show-upload-list="false" :custom-request="uploadForumAttachmentToForm" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">
+                <a-button :loading="attachmentUploading">上传附件</a-button>
+              </a-upload>
             </section>
 
             <section class="edit-section edit-section--settings">
@@ -551,11 +567,14 @@ import {
   listContents,
   updateContent,
   updateContentState,
+  checkAdminForumAttachment,
+  uploadAdminForumAttachment,
 } from '../api/admin';
 import { formatDateTimeYmdHm } from '../utils/date';
 import { uploadAdminMedia } from '../utils/cosUpload';
 import { createLatestRequestRunner } from '../utils/latest-request';
 import type { AdminUser, ContentItem, ContentType, ContentVisibility, MallCategory } from '../types/api';
+import { MAX_FORUM_ATTACHMENTS, sha256File, validateForumAttachmentFile } from '../utils/forumAttachment';
 import FilterPanel from '../components/admin/FilterPanel.vue';
 import PageHeader from '../components/admin/PageHeader.vue';
 import TableToolbar from '../components/admin/TableToolbar.vue';
@@ -606,6 +625,7 @@ const editForm = reactive({
   videosText: '',
   mainImagesText: '',
   subImagesText: '',
+  attachments: [] as Array<{ mediaAssetId: string; name: string; sizeBytes: number; contentType: string; url?: string }>,
 });
 
 /** 编辑态下用于判断媒体字段是否改动，避免误传空数组清空资源 */
@@ -622,6 +642,7 @@ const mediaUploading = reactive<Record<MediaTextField, boolean>>({
   mainImagesText: false,
   subImagesText: false,
 });
+const attachmentUploading = ref(false);
 
 const adminRef = ref<AdminUser | null>(null);
 
@@ -934,6 +955,37 @@ async function uploadToMediaField(options: any, field: MediaTextField, mediaType
   }
 }
 
+function formatAttachmentSize(size: number) {
+  const n = Number(size || 0);
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+function removeForumAttachment(index: number) {
+  editForm.attachments.splice(index, 1);
+}
+
+async function uploadForumAttachmentToForm(options: any) {
+  const file = options.file instanceof File ? options.file : options.file?.originFileObj;
+  attachmentUploading.value = true;
+  try {
+    if (!file) throw new Error('请选择附件');
+    if (editForm.attachments.length >= MAX_FORUM_ATTACHMENTS) throw new Error('每篇帖子最多5个附件');
+    validateForumAttachmentFile(file);
+    const sha256 = await sha256File(file);
+    const metadata = { sha256, filename: file.name, contentType: file.type || 'application/octet-stream', sizeBytes: file.size };
+    const checked = await checkAdminForumAttachment(metadata);
+    const payload = checked?.exists ? checked : await uploadAdminForumAttachment(file, metadata);
+    editForm.attachments.push({ mediaAssetId: payload.mediaAssetId || payload.id, name: payload.name || file.name, sizeBytes: payload.sizeBytes || file.size, contentType: payload.contentType || file.type, url: payload.url });
+    options.onSuccess?.(payload, file);
+    message.success(checked?.exists ? '秒传成功' : '上传成功');
+  } catch (error) {
+    options.onError?.(error);
+    message.error(uploadErrorMessage(error));
+  } finally {
+    attachmentUploading.value = false;
+  }
+}
+
 function resetEditForm() {
   editForm.title = '';
   editForm.content = '';
@@ -959,6 +1011,7 @@ function resetEditForm() {
   editForm.videosText = '';
   editForm.mainImagesText = '';
   editForm.subImagesText = '';
+  editForm.attachments = [];
   editingId.value = null;
   editMediaSnapshot.imagesText = '';
   editMediaSnapshot.videosText = '';
@@ -1018,6 +1071,7 @@ async function openEdit(record: ContentItem) {
       editForm.imagesText = urlsToLines(normArray(d.images));
     }
     editForm.videosText = urlsToLines(normArray(d.videos));
+    editForm.attachments = normArray(d.attachments).map((item: any) => ({ mediaAssetId: String(item.mediaAssetId || item.id), name: String(item.name || '附件'), sizeBytes: Number(item.sizeBytes || 0), contentType: String(item.contentType || ''), url: item.url }));
     editMediaSnapshot.imagesText = editForm.imagesText;
     editMediaSnapshot.videosText = editForm.videosText;
     editMediaSnapshot.mainImagesText = editForm.mainImagesText;
@@ -1054,6 +1108,7 @@ function buildPayload(): Record<string, unknown> {
     }
     if (!isEdit || editForm.imagesText !== editMediaSnapshot.imagesText) base.images = images;
     if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
+    base.attachments = editForm.attachments.map((item) => ({ mediaAssetId: item.mediaAssetId }));
     return base;
   }
   if (type.value === 'items') {
@@ -1096,6 +1151,10 @@ function buildPayload(): Record<string, unknown> {
 }
 
 async function submitEdit() {
+  if (attachmentUploading.value) {
+    message.warning('附件上传中，请等待上传完成后再保存');
+    return Promise.reject();
+  }
   const payload = buildPayload();
   if (type.value === 'posts') {
     if (!editForm.title.trim()) {
@@ -1643,6 +1702,25 @@ function formatLocation(v: unknown) {
 
 .mp-kv__k {
   color: rgba(0, 0, 0, 0.45);
+}
+
+.forum-attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.forum-attachment-row__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mp-attachments {
+  margin-top: 12px;
 }
 
 </style>

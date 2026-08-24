@@ -210,6 +210,20 @@ export async function updateContent(type: ContentType, id: string, data: Record<
   return unwrap<any>(await http.patch(`/api/admin/contents/${type}/${id}`, data));
 }
 
+export async function checkAdminForumAttachment(data: { sha256: string; filename: string; contentType: string; sizeBytes: number }) {
+  return unwrap<any>(await http.post('/api/admin/posts/attachments/check', data));
+}
+
+export async function uploadAdminForumAttachment(file: File, metadata: { sha256: string; filename: string; contentType: string; sizeBytes: number }) {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('sha256', metadata.sha256);
+  form.append('filename', metadata.filename);
+  form.append('contentType', metadata.contentType);
+  form.append('sizeBytes', String(metadata.sizeBytes));
+  return unwrap<any>(await http.post('/api/admin/posts/attachments/upload', form));
+}
+
 export async function deleteContent(type: ContentType, id: string) {
   return unwrap<{ id: string }>(await http.delete(`/api/admin/contents/${type}/${id}`));
 }
