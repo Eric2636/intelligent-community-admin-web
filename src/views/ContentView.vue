@@ -131,6 +131,11 @@
             <a-tag v-if="detail?.validUntil">有效至 {{ formatDateTimeYmdHm(detail.validUntil) }}</a-tag>
           </div>
             <div class="mp-content" v-if="detail?.content">{{ detail.content }}</div>
+            <div v-if="normArray(detail?.attachments).length" class="mp-attachments">
+              <a-list size="small" :data-source="normArray(detail?.attachments)">
+                <template #renderItem="{ item }"><a-list-item><a :href="item.url" target="_blank" rel="noreferrer">{{ item.name || '附件' }}</a><span>{{ formatAttachmentSize(item.sizeBytes) }}</span></a-list-item></template>
+              </a-list>
+            </div>
             <div class="mp-media" v-if="normArray(detail?.images).length || normArray(detail?.videos).length">
               <div class="mp-media-grid">
                 <a-image v-for="(u, idx) in normArray(detail?.images)" :key="`img-${idx}`" :src="String(u)" />
@@ -180,7 +185,9 @@
             <div class="mp-price" v-if="detail?.price">{{ detail.price }}{{ detail?.unit || '元' }}</div>
             <div class="mp-subtime">{{ detail?.createdAt ? formatDateTimeYmdHm(detail.createdAt) : '' }}</div>
             <div class="mp-content">{{ detail?.desc || '-' }}</div>
-            <div class="mp-sub">联系：{{ detail?.contact || '-' }}</div>
+            <div v-if="detail?.wechatContact" class="mp-sub">微信号：{{ detail.wechatContact }}</div>
+            <div v-if="detail?.phoneContact" class="mp-sub">{{ detail.phoneIsWechat ? '手机号（可添加微信）' : '手机号' }}：{{ detail.phoneContact }}</div>
+            <div v-if="!detail?.wechatContact && !detail?.phoneContact" class="mp-sub">联系方式：{{ detail?.contact || '-' }}</div>
             <div class="mp-kv" v-if="detail?.locationName || detail?.locationAddress || detail?.latitude || detail?.longitude">
               <div class="mp-kv__row"><span class="mp-kv__k">门店</span>{{ detail?.locationName || '-' }}</div>
               <div class="mp-kv__row"><span class="mp-kv__k">地址</span>{{ detail?.locationAddress || '-' }}</div>
@@ -349,8 +356,19 @@
                       上传视频
                     </a-button>
                   </a-upload>
-                </a-form-item>
+                  </a-form-item>
+                </div>
+            </section>
+
+            <section class="edit-section">
+              <div class="edit-section__head"><div><div class="edit-section__title">附件</div><div class="edit-section__sub">最多5个，单个不超过20MB，支持秒传</div></div></div>
+              <div v-for="(attachment, idx) in editForm.attachments" :key="attachment.mediaAssetId" class="forum-attachment-row">
+                <span class="forum-attachment-row__name">{{ attachment.name }}</span><span>{{ formatAttachmentSize(attachment.sizeBytes) }}</span>
+                <a-button size="small" danger @click="removeForumAttachment(idx)">移除</a-button>
               </div>
+              <a-upload v-if="editForm.attachments.length < 5" :show-upload-list="false" :custom-request="uploadForumAttachmentToForm" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">
+                <a-button :loading="attachmentUploading">上传附件</a-button>
+              </a-upload>
             </section>
 
             <section class="edit-section edit-section--settings">
@@ -392,9 +410,23 @@
           <a-form-item label="单位">
             <a-input v-model:value="editForm.unit" placeholder="默认 元" />
           </a-form-item>
-            <a-form-item label="联系方式">
-              <a-input v-model:value="editForm.contact" />
-            </a-form-item>
+            <div class="edit-form-grid edit-form-grid--two">
+              <a-form-item label="微信号">
+                <a-input v-model:value="editForm.wechatContact" placeholder="选填" />
+              </a-form-item>
+              <a-form-item label="手机号">
+                <a-input v-model:value="editForm.phoneContact" placeholder="选填，仅支持中国大陆手机号" maxlength="11" />
+              </a-form-item>
+            </div>
+            <a-checkbox v-model:checked="editForm.phoneIsWechat" :disabled="!editForm.phoneContact.trim()">手机号也是微信号</a-checkbox>
+            <a-alert
+              v-if="editForm.legacyContact && !editForm.wechatContact && !editForm.phoneContact"
+              class="legacy-contact-alert"
+              type="warning"
+              show-icon
+              :message="`历史联系方式：${editForm.legacyContact}`"
+              description="请补充微信号或手机号后保存，系统将转换为新的联系方式格式。"
+            />
           <a-form-item label="门店名称">
             <a-input v-model:value="editForm.locationName" placeholder="例如 洪山区人民政府店" />
           </a-form-item>
@@ -535,11 +567,14 @@ import {
   listContents,
   updateContent,
   updateContentState,
+  checkAdminForumAttachment,
+  uploadAdminForumAttachment,
 } from '../api/admin';
 import { formatDateTimeYmdHm } from '../utils/date';
 import { uploadAdminMedia } from '../utils/cosUpload';
 import { createLatestRequestRunner } from '../utils/latest-request';
 import type { AdminUser, ContentItem, ContentType, ContentVisibility, MallCategory } from '../types/api';
+import { MAX_FORUM_ATTACHMENTS, sha256File, validateForumAttachmentFile } from '../utils/forumAttachment';
 import FilterPanel from '../components/admin/FilterPanel.vue';
 import PageHeader from '../components/admin/PageHeader.vue';
 import TableToolbar from '../components/admin/TableToolbar.vue';
@@ -574,7 +609,10 @@ const editForm = reactive({
   categoryId: '',
   price: '',
   unit: '元',
-  contact: '',
+  wechatContact: '',
+  phoneContact: '',
+  phoneIsWechat: false,
+  legacyContact: '',
   locationName: '',
   locationAddress: '',
   latitude: '',
@@ -587,6 +625,7 @@ const editForm = reactive({
   videosText: '',
   mainImagesText: '',
   subImagesText: '',
+  attachments: [] as Array<{ mediaAssetId: string; name: string; sizeBytes: number; contentType: string; url?: string }>,
 });
 
 /** 编辑态下用于判断媒体字段是否改动，避免误传空数组清空资源 */
@@ -603,6 +642,7 @@ const mediaUploading = reactive<Record<MediaTextField, boolean>>({
   mainImagesText: false,
   subImagesText: false,
 });
+const attachmentUploading = ref(false);
 
 const adminRef = ref<AdminUser | null>(null);
 
@@ -915,6 +955,37 @@ async function uploadToMediaField(options: any, field: MediaTextField, mediaType
   }
 }
 
+function formatAttachmentSize(size: number) {
+  const n = Number(size || 0);
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+function removeForumAttachment(index: number) {
+  editForm.attachments.splice(index, 1);
+}
+
+async function uploadForumAttachmentToForm(options: any) {
+  const file = options.file instanceof File ? options.file : options.file?.originFileObj;
+  attachmentUploading.value = true;
+  try {
+    if (!file) throw new Error('请选择附件');
+    if (editForm.attachments.length >= MAX_FORUM_ATTACHMENTS) throw new Error('每篇帖子最多5个附件');
+    validateForumAttachmentFile(file);
+    const sha256 = await sha256File(file);
+    const metadata = { sha256, filename: file.name, contentType: file.type || 'application/octet-stream', sizeBytes: file.size };
+    const checked = await checkAdminForumAttachment(metadata);
+    const payload = checked?.exists ? checked : await uploadAdminForumAttachment(file, metadata);
+    editForm.attachments.push({ mediaAssetId: payload.mediaAssetId || payload.id, name: payload.name || file.name, sizeBytes: payload.sizeBytes || file.size, contentType: payload.contentType || file.type, url: payload.url });
+    options.onSuccess?.(payload, file);
+    message.success(checked?.exists ? '秒传成功' : '上传成功');
+  } catch (error) {
+    options.onError?.(error);
+    message.error(uploadErrorMessage(error));
+  } finally {
+    attachmentUploading.value = false;
+  }
+}
+
 function resetEditForm() {
   editForm.title = '';
   editForm.content = '';
@@ -924,7 +995,10 @@ function resetEditForm() {
   editForm.categoryId = defaultMallCategoryId();
   editForm.price = '';
   editForm.unit = '元';
-  editForm.contact = '';
+  editForm.wechatContact = '';
+  editForm.phoneContact = '';
+  editForm.phoneIsWechat = false;
+  editForm.legacyContact = '';
   editForm.locationName = '';
   editForm.locationAddress = '';
   editForm.latitude = '';
@@ -937,6 +1011,7 @@ function resetEditForm() {
   editForm.videosText = '';
   editForm.mainImagesText = '';
   editForm.subImagesText = '';
+  editForm.attachments = [];
   editingId.value = null;
   editMediaSnapshot.imagesText = '';
   editMediaSnapshot.videosText = '';
@@ -974,7 +1049,10 @@ async function openEdit(record: ContentItem) {
     editForm.categoryId = String(d.categoryId || defaultMallCategoryId());
     editForm.price = d.price != null ? String(d.price) : '';
     editForm.unit = String(d.unit || '元');
-    editForm.contact = String(d.contact || '');
+    editForm.wechatContact = String(d.wechatContact || '');
+    editForm.phoneContact = String(d.phoneContact || '');
+    editForm.phoneIsWechat = Boolean(d.phoneIsWechat);
+    editForm.legacyContact = !d.wechatContact && !d.phoneContact ? String(d.contact || '') : '';
     editForm.locationName = String(d.locationName || '');
     editForm.locationAddress = String(d.locationAddress || '');
     editForm.latitude = d.latitude != null ? String(d.latitude) : '';
@@ -993,6 +1071,7 @@ async function openEdit(record: ContentItem) {
       editForm.imagesText = urlsToLines(normArray(d.images));
     }
     editForm.videosText = urlsToLines(normArray(d.videos));
+    editForm.attachments = normArray(d.attachments).map((item: any) => ({ mediaAssetId: String(item.mediaAssetId || item.id), name: String(item.name || '附件'), sizeBytes: Number(item.sizeBytes || 0), contentType: String(item.contentType || ''), url: item.url }));
     editMediaSnapshot.imagesText = editForm.imagesText;
     editMediaSnapshot.videosText = editForm.videosText;
     editMediaSnapshot.mainImagesText = editForm.mainImagesText;
@@ -1029,6 +1108,7 @@ function buildPayload(): Record<string, unknown> {
     }
     if (!isEdit || editForm.imagesText !== editMediaSnapshot.imagesText) base.images = images;
     if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
+    base.attachments = editForm.attachments.map((item) => ({ mediaAssetId: item.mediaAssetId }));
     return base;
   }
   if (type.value === 'items') {
@@ -1039,7 +1119,9 @@ function buildPayload(): Record<string, unknown> {
       desc: editForm.desc.trim(),
       price: editForm.price.trim() || undefined,
       unit: editForm.unit.trim() || '元',
-      contact: editForm.contact.trim() || undefined,
+      wechatContact: editForm.wechatContact.trim() || null,
+      phoneContact: editForm.phoneContact.trim() || null,
+      phoneIsWechat: Boolean(editForm.phoneIsWechat),
       locationName: editForm.locationName.trim() || undefined,
       locationAddress: editForm.locationAddress.trim() || undefined,
       latitude: optionalNumber(editForm.latitude),
@@ -1069,6 +1151,10 @@ function buildPayload(): Record<string, unknown> {
 }
 
 async function submitEdit() {
+  if (attachmentUploading.value) {
+    message.warning('附件上传中，请等待上传完成后再保存');
+    return Promise.reject();
+  }
   const payload = buildPayload();
   if (type.value === 'posts') {
     if (!editForm.title.trim()) {
@@ -1095,6 +1181,16 @@ async function submitEdit() {
   if (type.value === 'items') {
     if (!editForm.title.trim()) {
       message.warning('请填写标题');
+      return Promise.reject();
+    }
+    const wechatContact = editForm.wechatContact.trim();
+    const phoneContact = editForm.phoneContact.trim();
+    if (!wechatContact && !phoneContact && !editForm.legacyContact.trim()) {
+      message.warning('请至少填写微信号或手机号');
+      return Promise.reject();
+    }
+    if (phoneContact && !/^1[3-9]\d{9}$/.test(phoneContact)) {
+      message.warning('请输入正确的手机号');
       return Promise.reject();
     }
     const lat = editForm.latitude.trim();
@@ -1606,6 +1702,25 @@ function formatLocation(v: unknown) {
 
 .mp-kv__k {
   color: rgba(0, 0, 0, 0.45);
+}
+
+.forum-attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.forum-attachment-row__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mp-attachments {
+  margin-top: 12px;
 }
 
 </style>
