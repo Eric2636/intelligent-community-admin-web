@@ -202,12 +202,32 @@ export async function getContentDetail(type: ContentType, id: string) {
   return unwrap<any>(await http.get(`/api/admin/contents/${type}/${id}`));
 }
 
+export async function getForumRegistrationEntries(id: string) {
+  return unwrap<{ total: number; list: Array<{ userId: string; name: string; avatar: string; phoneNumber: string; createdAt: string }> }>(
+    await http.get(`/api/admin/contents/posts/${id}/registration-entries`),
+  );
+}
+
 export async function createContent(type: ContentType, data: Record<string, unknown>) {
   return unwrap<any>(await http.post(`/api/admin/contents/${type}`, data));
 }
 
 export async function updateContent(type: ContentType, id: string, data: Record<string, unknown>) {
   return unwrap<any>(await http.patch(`/api/admin/contents/${type}/${id}`, data));
+}
+
+export async function checkAdminForumAttachment(data: { sha256: string; filename: string; contentType: string; sizeBytes: number }) {
+  return unwrap<any>(await http.post('/api/admin/posts/attachments/check', data));
+}
+
+export async function uploadAdminForumAttachment(file: File, metadata: { sha256: string; filename: string; contentType: string; sizeBytes: number }) {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('sha256', metadata.sha256);
+  form.append('filename', metadata.filename);
+  form.append('contentType', metadata.contentType);
+  form.append('sizeBytes', String(metadata.sizeBytes));
+  return unwrap<any>(await http.post('/api/admin/posts/attachments/upload', form));
 }
 
 export async function deleteContent(type: ContentType, id: string) {
