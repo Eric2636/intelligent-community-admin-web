@@ -202,6 +202,12 @@ export async function getContentDetail(type: ContentType, id: string) {
   return unwrap<any>(await http.get(`/api/admin/contents/${type}/${id}`));
 }
 
+export async function getForumRegistrationEntries(id: string) {
+  return unwrap<{ total: number; list: Array<{ userId: string; name: string; avatar: string; phoneNumber: string; createdAt: string }> }>(
+    await http.get(`/api/admin/contents/posts/${id}/registration-entries`),
+  );
+}
+
 export async function createContent(type: ContentType, data: Record<string, unknown>) {
   return unwrap<any>(await http.post(`/api/admin/contents/${type}`, data));
 }

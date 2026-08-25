@@ -239,6 +239,9 @@ export type ContentItem = {
   content?: string;
   desc?: string;
   postType?: 'NORMAL' | 'ANNOUNCEMENT';
+  featureType?: 'CONTENT' | 'REGISTRATION' | string;
+  createdByAdminId?: string | null;
+  registration?: { capacity: number; registeredCount: number; deadlineAt: string } | null;
   validUntil?: string | null;
   authorId?: string;
   authorName?: string;

@@ -75,6 +75,17 @@
           <a-tag v-if="record.pinned" color="blue">已置顶</a-tag>
           <span v-else class="table-empty-value">—</span>
         </template>
+        <template v-if="column.key === 'featureType'">
+          <div class="activity-type-cell">
+            <a-tag :color="record.featureType === 'REGISTRATION' ? 'blue' : 'default'">{{ activityPresentation(record).label }}</a-tag>
+            <template v-if="activityPresentation(record).registration">
+              <span>已报名 {{ activityPresentation(record).registration?.registeredCount }} / {{ activityPresentation(record).registration?.capacity }}</span>
+              <span>截止 {{ formatDateTimeYmdHm(activityPresentation(record).registration?.deadlineAt) }}</span>
+              <a-tag>{{ activityPresentation(record).registration?.status }}</a-tag>
+              <a-button v-if="canModifyContent(record)" type="link" size="small" @click="openRegistrationEntries(record)">查看报名人员</a-button>
+            </template>
+          </div>
+        </template>
         <template v-if="column.key === 'author'">
           {{ recordAuthorName(record) || '-' }}
         </template>
@@ -105,6 +116,21 @@
       </template>
     </a-table>
 
+    <a-modal v-model:open="registrationOpen" title="报名人员" width="760px" :footer="null" destroy-on-close>
+      <a-spin :spinning="registrationLoading">
+        <a-alert v-if="registrationError" type="error" show-icon :message="registrationError">
+          <template #action><a-button size="small" @click="reloadRegistrationEntries">重新加载</a-button></template>
+        </a-alert>
+        <a-empty v-else-if="!registrationLoading && registrationEntries.length === 0" description="暂无人报名" />
+        <a-table v-else-if="!registrationError" size="small" row-key="userId" :pagination="false" :data-source="registrationEntries">
+          <a-table-column title="头像" key="avatar" width="72"><template #default="{ record }"><a-avatar :src="record.avatar" /></template></a-table-column>
+          <a-table-column title="姓名" data-index="name" key="name" />
+          <a-table-column title="手机号" data-index="phoneNumber" key="phoneNumber" />
+          <a-table-column title="报名时间" key="createdAt"><template #default="{ record }">{{ formatDateTimeYmdHm(record.createdAt) }}</template></a-table-column>
+        </a-table>
+      </a-spin>
+    </a-modal>
+
     <a-modal v-model:open="detailOpen" :title="`${title}详情`" width="900px" :footer="null" destroy-on-close>
       <a-spin :spinning="detailLoading">
         <!-- Header: 作者 + 时间（对标小程序） -->
@@ -131,6 +157,12 @@
             <a-tag v-if="detail?.validUntil">有效至 {{ formatDateTimeYmdHm(detail.validUntil) }}</a-tag>
           </div>
             <div class="mp-content" v-if="detail?.content">{{ detail.content }}</div>
+            <div v-if="detail?.featureType === 'REGISTRATION' && detail?.registration" class="mp-kv">
+              <div class="mp-kv__row"><span class="mp-kv__k">已报名人数</span>{{ detail.registration.registeredCount }} / {{ detail.registration.capacity }}</div>
+              <div class="mp-kv__row"><span class="mp-kv__k">报名截止时间</span>{{ formatDateTimeYmdHm(detail.registration.deadlineAt) }}</div>
+              <div class="mp-kv__row"><span class="mp-kv__k">报名状态</span>{{ registrationStatusLabel(detail.registration) }}</div>
+              <a-button v-if="canModifyContent(detail)" type="link" @click="openRegistrationEntries(detail)">查看报名人员</a-button>
+            </div>
             <div v-if="normArray(detail?.attachments).length" class="mp-attachments">
               <a-list size="small" :data-source="normArray(detail?.attachments)">
                 <template #renderItem="{ item }"><a-list-item><a :href="item.url" target="_blank" rel="noreferrer">{{ item.name || '附件' }}</a><span>{{ formatAttachmentSize(item.sizeBytes) }}</span></a-list-item></template>
@@ -292,15 +324,25 @@
               </div>
 
               <div class="edit-form-grid edit-form-grid--two">
-                <a-form-item label="内容类型">
+                <a-form-item label="公告/帖子">
                   <a-radio-group v-model:value="editForm.postType" button-style="solid">
                     <a-radio-button value="NORMAL">普通留言</a-radio-button>
                     <a-radio-button value="ANNOUNCEMENT">公告</a-radio-button>
                   </a-radio-group>
                 </a-form-item>
+                <a-form-item v-if="editForm.postType === 'NORMAL'" label="活动类型">
+                  <a-select v-model:value="editForm.featureType">
+                    <a-select-option value="CONTENT">内容</a-select-option>
+                    <a-select-option value="REGISTRATION">活动报名</a-select-option>
+                  </a-select>
+                </a-form-item>
                 <a-form-item v-if="editForm.postType === 'ANNOUNCEMENT'" label="公告过期时间" required>
                   <a-input v-model:value="editForm.validUntil" type="datetime-local" />
                 </a-form-item>
+              </div>
+              <div v-if="editForm.postType === 'NORMAL' && editForm.featureType === 'REGISTRATION'" class="edit-form-grid edit-form-grid--two">
+                <a-form-item label="报名人数上限" required><a-input v-model:value="editForm.registrationCapacity" type="number" min="1" /></a-form-item>
+                <a-form-item label="报名截止时间" required><a-input v-model:value="editForm.registrationDeadlineAt" type="datetime-local" /></a-form-item>
               </div>
 
               <a-form-item label="标题" required>
@@ -563,6 +605,7 @@ import {
   errorMessage,
   getContentDetail,
   getCurrentAdmin,
+  getForumRegistrationEntries,
   listMallCategories,
   listContents,
   updateContent,
@@ -575,6 +618,9 @@ import { uploadAdminMedia } from '../utils/cosUpload';
 import { createLatestRequestRunner } from '../utils/latest-request';
 import type { AdminUser, ContentItem, ContentType, ContentVisibility, MallCategory } from '../types/api';
 import { MAX_FORUM_ATTACHMENTS, sha256File, validateForumAttachmentFile } from '../utils/forumAttachment';
+import { createRegistrationEntriesLoader } from '../utils/forumRegistrationEntries';
+import { forumActivityPresentation } from '../utils/forumActivityPresentation';
+import { canAdminModifyForumContent } from '../utils/forumContentOwnership';
 import FilterPanel from '../components/admin/FilterPanel.vue';
 import PageHeader from '../components/admin/PageHeader.vue';
 import TableToolbar from '../components/admin/TableToolbar.vue';
@@ -592,6 +638,16 @@ const listRequest = createLatestRequestRunner();
 const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detail = ref<any>(null);
+const registrationOpen = ref(false);
+const registrationLoading = ref(false);
+const registrationError = ref('');
+const registrationPostId = ref('');
+const registrationEntries = ref<Array<{ userId: string; name: string; avatar: string; phoneNumber: string; createdAt: string }>>([]);
+const registrationLoader = createRegistrationEntriesLoader(getForumRegistrationEntries, (patch: any) => {
+  if (patch.loading !== undefined) registrationLoading.value = patch.loading;
+  if (patch.error !== undefined) registrationError.value = patch.error;
+  if (patch.entries !== undefined) registrationEntries.value = patch.entries;
+});
 
 const mallCategories = ref<MallCategory[]>([]);
 
@@ -620,6 +676,9 @@ const editForm = reactive({
   visibility: 'ONLINE' as ContentVisibility,
   pinned: false,
   postType: 'NORMAL' as 'NORMAL' | 'ANNOUNCEMENT',
+  featureType: 'CONTENT' as 'CONTENT' | 'REGISTRATION',
+  registrationCapacity: '',
+  registrationDeadlineAt: '',
   validUntil: '',
   imagesText: '',
   videosText: '',
@@ -667,7 +726,11 @@ async function refreshAdmin() {
 
 const isSuperAdmin = computed(() => adminRef.value?.role === 'SUPERADMIN');
 const boundUserId = computed(() => (adminRef.value?.boundUserId || '').trim());
-const canCreateContent = computed(() => Boolean(boundUserId.value));
+const canCreateContent = computed(() =>
+  type.value === 'posts'
+    ? Boolean(adminRef.value?.id) && adminRef.value?.enabled !== false
+    : Boolean(boundUserId.value),
+);
 const canPublishAnnouncement = computed(() => Boolean(adminRef.value?.id) && adminRef.value?.enabled !== false);
 
 function contentOwnerId(record: ContentItem): string {
@@ -675,6 +738,15 @@ function contentOwnerId(record: ContentItem): string {
 }
 
 function canModifyContent(record: ContentItem): boolean {
+  if (type.value === 'posts') {
+    return canAdminModifyForumContent({
+      role: adminRef.value?.role,
+      adminId: adminRef.value?.id,
+      boundUserId: boundUserId.value,
+      authorId: record.authorId,
+      createdByAdminId: record.createdByAdminId,
+    });
+  }
   if (isSuperAdmin.value) return true;
   if (!boundUserId.value) return false;
   return contentOwnerId(record) === boundUserId.value;
@@ -708,7 +780,8 @@ const columns = computed(() => {
     { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 156 },
   ];
   if (type.value === 'posts') {
-    base.splice(5, 0, { title: '公告有效期', key: 'validUntil', width: 168 });
+    base.splice(2, 0, { title: '活动类型', key: 'featureType', width: 210 });
+    base.splice(6, 0, { title: '公告有效期', key: 'validUntil', width: 168 });
   }
   return [...base, { title: '操作', key: 'actions', width: 320, fixed: 'right' as const }];
 });
@@ -752,6 +825,29 @@ async function load(deduplicate = false) {
       loading.value = value;
     },
   });
+}
+
+function registrationStatusLabel(registration: { capacity?: number; registeredCount?: number; deadlineAt?: string }) {
+  if (new Date(String(registration.deadlineAt || '')).getTime() <= Date.now()) return '已截止';
+  if (Number(registration.registeredCount || 0) >= Number(registration.capacity || 0)) return '已满';
+  return '报名中';
+}
+const activityPresentation = forumActivityPresentation;
+
+async function loadRegistrationEntries() {
+  await registrationLoader.load(registrationPostId.value);
+}
+
+function openRegistrationEntries(record: ContentItem) {
+  registrationPostId.value = record.id;
+  registrationEntries.value = [];
+  registrationError.value = '';
+  registrationOpen.value = true;
+  loadRegistrationEntries();
+}
+
+function reloadRegistrationEntries() {
+  registrationLoader.retry();
 }
 
 function submitSearch() {
@@ -1006,6 +1102,9 @@ function resetEditForm() {
   editForm.visibility = 'ONLINE';
   editForm.pinned = false;
   editForm.postType = 'NORMAL';
+  editForm.featureType = 'CONTENT';
+  editForm.registrationCapacity = '';
+  editForm.registrationDeadlineAt = '';
   editForm.validUntil = '';
   editForm.imagesText = '';
   editForm.videosText = '';
@@ -1060,6 +1159,9 @@ async function openEdit(record: ContentItem) {
     editForm.visibility = d.visibility === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
     editForm.pinned = Boolean(d.pinned);
     editForm.postType = d.postType === 'ANNOUNCEMENT' ? 'ANNOUNCEMENT' : 'NORMAL';
+    editForm.featureType = d.featureType === 'REGISTRATION' ? 'REGISTRATION' : 'CONTENT';
+    editForm.registrationCapacity = d.registration?.capacity != null ? String(d.registration.capacity) : '';
+    editForm.registrationDeadlineAt = toDatetimeLocalValue(d.registration?.deadlineAt);
     editForm.validUntil = toDatetimeLocalValue(d.validUntil);
     if (type.value === 'items') {
       const main = normArray(d.mainImages);
@@ -1101,10 +1203,15 @@ function buildPayload(): Record<string, unknown> {
       title: editForm.title.trim(),
       content: editForm.content.trim(),
       postType: editForm.postType,
+      featureType: editForm.postType === 'ANNOUNCEMENT' ? 'CONTENT' : editForm.featureType,
     });
     if (editForm.postType === 'ANNOUNCEMENT') {
       const validUntil = datetimeLocalToIso(editForm.validUntil);
       if (validUntil) base.validUntil = validUntil;
+    }
+    if (editForm.postType === 'NORMAL' && editForm.featureType === 'REGISTRATION') {
+      base.registrationCapacity = Number(editForm.registrationCapacity);
+      base.registrationDeadlineAt = datetimeLocalToIso(editForm.registrationDeadlineAt);
     }
     if (!isEdit || editForm.imagesText !== editMediaSnapshot.imagesText) base.images = images;
     if (!isEdit || editForm.videosText !== editMediaSnapshot.videosText) base.videos = videos;
@@ -1169,6 +1276,17 @@ async function submitEdit() {
       }
       if (new Date(validUntil).getTime() <= Date.now()) {
         message.warning('公告过期时间必须晚于当前时间');
+        return Promise.reject();
+      }
+    }
+    if (editForm.postType === 'NORMAL' && editForm.featureType === 'REGISTRATION') {
+      if (!/^\d+$/.test(editForm.registrationCapacity) || Number(editForm.registrationCapacity) < 1) {
+        message.warning('请填写有效的报名人数上限');
+        return Promise.reject();
+      }
+      const deadline = datetimeLocalToIso(editForm.registrationDeadlineAt);
+      if (!deadline || new Date(deadline).getTime() <= Date.now()) {
+        message.warning('报名截止时间必须晚于当前时间');
         return Promise.reject();
       }
     }
@@ -1260,6 +1378,7 @@ onMounted(async () => {
   load();
 });
 onUnmounted(listRequest.dispose);
+onUnmounted(registrationLoader.dispose);
 
 function titleTooltip(record: ContentItem) {
   const t = record.title?.trim();
@@ -1315,6 +1434,9 @@ function formatLocation(v: unknown) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.activity-type-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-size: 12px; white-space: nowrap; }
+.activity-type-cell :deep(.ant-btn) { height: auto; padding: 0; }
 
 .content-title-cell {
   color: rgba(0, 0, 0, 0.75);
